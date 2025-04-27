@@ -54,23 +54,13 @@ const allowedOrigins = getAllowedOrigins();
 
 // Set up Socket.IO
 const io = new Server(httpServer, {
+  path: '/socket.io',
   cors: {
-    origin: allowedOrigins,
+    origin: '*',
     methods: ['GET', 'POST'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+    credentials: true
   },
-  transports: ['polling'],  // Use polling only
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  connectTimeout: 45000,
-  path: '/api/socket.io',  // Use the API path for Vercel
-  serveClient: false,
-  cookie: false,
-  allowEIO3: true,  // Allow Engine.IO v3 clients
-  allowUpgrades: false,  // Disable transport upgrades
-  perMessageDeflate: false,  // Disable compression for better performance
-  maxHttpBufferSize: 1e8  // Increase buffer size for large messages
+  transports: ['websocket', 'polling']
 });
 
 // Add Socket.IO middleware for logging and error handling

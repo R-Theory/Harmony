@@ -31,14 +31,14 @@ class QueueService {
     
     // Update Socket.IO configuration
     this.socket = io(socketUrl, {
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/api/socket.io',  // Use the API path for Vercel
+      path: '/socket.io',  // Use the standard Socket.IO path
       forceNew: true
     });
 
