@@ -24,6 +24,15 @@ const Settings = () => {
   const [autoPlay, setAutoPlay] = useState(true);
   const [highQuality, setHighQuality] = useState(true);
 
+  // Get the API base URL based on environment
+  const getApiBaseUrl = () => {
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:3000';
+    }
+    // For production, use the same hostname but with the API subdomain
+    return `https://api.${window.location.hostname}`;
+  };
+
   useEffect(() => {
     // Check if Spotify is connected
     const connected = localStorage.getItem('spotify_connected') === 'true';
@@ -36,10 +45,12 @@ const Settings = () => {
       localStorage.removeItem('spotify_access_token');
       localStorage.removeItem('spotify_refresh_token');
       localStorage.removeItem('spotify_connected');
+      localStorage.removeItem('spotify_user_profile');
       setIsSpotifyConnected(false);
     } else {
       try {
-        const response = await axios.get('/api/login');
+        const apiBaseUrl = getApiBaseUrl();
+        const response = await axios.get(`${apiBaseUrl}/api/login`);
         window.location.href = response.data.url;
       } catch (error) {
         console.error('Error initiating Spotify login:', error);
