@@ -1,0 +1,60 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true
+    },
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/bower_components": true
+    },
+    "files.associations": {
+        "*.js": "javascript",
+        "*.jsx": "javascriptreact",
+        "*.ts": "typescript",
+        "*.tsx": "typescriptreact",
+        "*.env": "dotenv"
+    },
+    "files.readonly": {
+        "**/.env": false
+    },
+    "files.readonlyFromPermissions": false,
+    "cursor.documentation": {
+        "react": "https://react.dev/reference/react",
+        "react-dom": "https://react.dev/reference/react-dom",
+        "react-router": "https://reactrouter.com/en/main",
+        "mui": "https://mui.com/material-ui/getting-started/",
+        "vite": "https://vitejs.dev/guide/",
+        "express": "https://expressjs.com/en/4x/api.html",
+        "spotify-api": "https://developer.spotify.com/documentation/web-api",
+        "simple-peer": "https://github.com/feross/simple-peer",
+        "axios": "https://axios-http.com/docs/intro",
+        "eslint": "https://eslint.org/docs/latest/",
+        "vercel": "https://vercel.com/docs",
+        "cookie-parser": "https://github.com/expressjs/cookie-parser",
+        "cors": "https://github.com/expressjs/cors",
+        "dotenv": "https://github.com/motdotla/dotenv"
+    },
+    "cursor.troubleshooting": {
+        "react-debug": "https://react.dev/learn/debugging",
+        "react-errors": "https://react.dev/reference/react/use-debug-value",
+        "vite-debug": "https://vitejs.dev/guide/troubleshooting.html",
+        "express-debug": "https://expressjs.com/en/guide/debugging.html",
+        "spotify-auth": "https://developer.spotify.com/documentation/web-api/tutorials/troubleshooting",
+        "cors-issues": "https://github.com/expressjs/cors#configuration-options",
+        "vercel-deploy": "https://vercel.com/docs/deployments/overview",
+        "node-debug": "https://nodejs.org/en/docs/guides/debugging-getting-started/",
+        "npm-troubleshoot": "https://docs.npmjs.com/common-errors",
+        "web-api-errors": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status",
+        "react-router-errors": "https://reactrouter.com/en/main/start/tutorial#handling-loading-and-error-states",
+        "mui-errors": "https://mui.com/material-ui/guides/minimizing-bundle-size/#option-2"
+    }
+} 
