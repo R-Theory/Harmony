@@ -4,7 +4,6 @@ import cors from 'cors';
 import SpotifyWebApi from 'spotify-web-api-node';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { setupPeerServer } from './peerServer.js';
 
 dotenv.config();
 
@@ -44,10 +43,6 @@ const io = new Server(httpServer, {
     credentials: true
   }
 });
-
-// Set up PeerJS server
-const peerServer = setupPeerServer(httpServer);
-app.use('/', peerServer);
 
 // Middleware
 app.use(cors({

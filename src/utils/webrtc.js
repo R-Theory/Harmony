@@ -27,19 +27,18 @@ export class WebRTCManager {
 
   async initialize() {
     const isProd = process.env.NODE_ENV === 'production';
-    const host = isProd ? window.location.hostname : 'localhost';
-    const port = isProd ? 443 : 3000;
 
     try {
       // Fetch ICE servers from our API
       const iceResponse = await fetch('/api/ice-servers');
       const { iceServers } = await iceResponse.json();
 
+      // Use a public PeerJS server instead of our own
       const config = {
-        host: isProd ? window.location.hostname : 'localhost',
-        port: isProd ? 443 : 3000,
-        path: '/peerjs',
-        secure: isProd,
+        host: '0.peerjs.com', // Public PeerJS server
+        port: 443,
+        path: '/',
+        secure: true,
         debug: !isProd,
         config: {
           iceServers,

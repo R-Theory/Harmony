@@ -16,8 +16,6 @@
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/server/index.js" },
-    { "source": "/peerjs/:path*", "destination": "/server/index.js" },
-    { "source": "/socket.io/:path*", "destination": "/server/index.js" },
     { "source": "/assets/:path*", "destination": "/dist/assets/:path*" },
     { "source": "/vite.svg", "destination": "/dist/vite.svg" },
     { "source": "/callback", "destination": "/dist/index.html" },
@@ -48,44 +46,6 @@
     },
     {
       "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Accept"
-        }
-      ]
-    },
-    {
-      "source": "/peerjs/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Accept"
-        },
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        }
-      ]
-    },
-    {
-      "source": "/socket.io/(.*)",
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
