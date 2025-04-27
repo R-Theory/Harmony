@@ -40,7 +40,12 @@ class QueueService {
       withCredentials: true,
       path: '/api/socket.io',  // Update path to include /api
       forceNew: true,
-      upgrade: true  // Allow transport upgrade
+      upgrade: true,  // Allow transport upgrade
+      rejectUnauthorized: false,  // Allow self-signed certificates
+      extraHeaders: {  // Add headers for CORS
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': 'true'
+      }
     });
 
     // Set up event listeners
@@ -74,6 +79,20 @@ class QueueService {
       this.isConnected = false;
       if (this.onError) {
         this.onError('Failed to connect to queue service. Please try refreshing the page.');
+      }
+      // Attempt to reconnect with polling only if websocket fails
+      if (this.socket.io.opts.transports.includes('websocket')) {
+        console.log('Retrying connection with polling only...');
+        this.socket.io.opts.transports = ['polling'];
+        this.socket.connect();
+      }
+    });
+
+    this.socket.on('error', (error) => {
+      console.error('Socket error:', error);
+      this.isConnected = false;
+      if (this.onError) {
+        this.onError('Queue service error. Please try refreshing the page.');
       }
     });
 

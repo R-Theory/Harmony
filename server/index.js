@@ -58,7 +58,7 @@ const io = new Server(httpServer, {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Credentials']
   },
   transports: ['polling', 'websocket'],  // Try polling first, then websocket
   pingTimeout: 60000,
@@ -70,10 +70,32 @@ const io = new Server(httpServer, {
   allowEIO3: true,  // Allow Engine.IO v3 clients
   allowUpgrades: true,  // Allow transport upgrades
   perMessageDeflate: false,  // Disable compression for better performance
-  maxHttpBufferSize: 1e8  // Increase buffer size for large messages
+  maxHttpBufferSize: 1e8,  // Increase buffer size for large messages
+  cors: {
+    origin: function(origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      const allowedOrigins = [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'https://harmony-vert.vercel.app',
+        'https://harmony-v0-1.vercel.app'
+      ];
+      
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }
 });
 
-// Add Socket.IO middleware for logging
+// Add Socket.IO middleware for logging and error handling
 io.use((socket, next) => {
   console.log('Socket.IO connection attempt:', {
     id: socket.id,
@@ -83,7 +105,18 @@ io.use((socket, next) => {
       query: socket.handshake.query
     }
   });
+  
+  // Add error handling
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
+  });
+  
   next();
+});
+
+// Add error handling for the Socket.IO server
+io.engine.on('connection_error', (err) => {
+  console.error('Socket.IO connection error:', err);
 });
 
 // Middleware
