@@ -90,6 +90,7 @@ export default function Session() {
         webrtc.addConnectionListener((event, data) => {
           switch (event) {
             case 'connected':
+              console.log('[Session] setPeerId called with:', data);
               setPeerId(data);
               setIsConnected(true);
               break;
@@ -283,6 +284,8 @@ export default function Session() {
       </Box>
     );
   }
+
+  console.log('[Session] Rendering with peerId:', peerId);
 
   return (
     <Box p={3}>
