@@ -9,8 +9,7 @@ const Callback = () => {
   useEffect(() => {
     const handleCallback = async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const access_token = urlParams.get('access_token');
-      const refresh_token = urlParams.get('refresh_token');
+      const code = urlParams.get('code');
       const error = urlParams.get('error');
 
       if (error) {
@@ -19,37 +18,50 @@ const Callback = () => {
         return;
       }
 
-      if (access_token && refresh_token) {
+      if (code) {
         try {
-          // Store tokens in localStorage
-          localStorage.setItem('spotify_access_token', access_token);
-          localStorage.setItem('spotify_refresh_token', refresh_token);
-          localStorage.setItem('spotify_connected', 'true');
+          // Exchange the code for tokens
+          const apiBaseUrl = window.location.origin;
+          const response = await axios.get(`${apiBaseUrl}/api/callback?code=${code}`);
           
-          // Fetch user profile to verify token works
-          const response = await axios.get('https://api.spotify.com/v1/me', {
-            headers: {
-              'Authorization': `Bearer ${access_token}`
-            }
-          });
-          
-          // Store user profile in localStorage for immediate access
-          localStorage.setItem('spotify_user_profile', JSON.stringify(response.data));
-          
-          // After successful authentication, redirect to home
-          navigate('/');
-        } catch (error) {
-          console.error('Error fetching user profile:', error);
-          // If we get a 401, the token is invalid
-          if (error.response?.status === 401) {
-            localStorage.removeItem('spotify_access_token');
-            localStorage.removeItem('spotify_refresh_token');
-            localStorage.removeItem('spotify_connected');
-            localStorage.removeItem('spotify_user_profile');
+          // The server should redirect with tokens in the URL
+          const redirectUrl = response.request.responseURL;
+          const redirectParams = new URLSearchParams(new URL(redirectUrl).search);
+          const access_token = redirectParams.get('access_token');
+          const refresh_token = redirectParams.get('refresh_token');
+
+          if (access_token && refresh_token) {
+            // Store tokens in localStorage
+            localStorage.setItem('spotify_access_token', access_token);
+            localStorage.setItem('spotify_refresh_token', refresh_token);
+            localStorage.setItem('spotify_connected', 'true');
+            
+            // Fetch user profile to verify token works
+            const profileResponse = await axios.get('https://api.spotify.com/v1/me', {
+              headers: {
+                'Authorization': `Bearer ${access_token}`
+              }
+            });
+            
+            // Store user profile in localStorage for immediate access
+            localStorage.setItem('spotify_user_profile', JSON.stringify(profileResponse.data));
+            
+            // After successful authentication, redirect to home
+            navigate('/');
+          } else {
+            console.error('No tokens received from callback');
             navigate('/settings');
           }
+        } catch (error) {
+          console.error('Error during callback:', error);
+          if (error.response) {
+            console.error('Error response:', error.response.data);
+            console.error('Error status:', error.response.status);
+          }
+          navigate('/settings');
         }
       } else {
+        console.error('No code received from Spotify');
         navigate('/settings');
       }
     };
