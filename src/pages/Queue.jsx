@@ -51,6 +51,7 @@ const Queue = () => {
       queueService.setCallbacks(
         // Queue update callback
         (updatedQueue) => {
+          console.log('Received queue update:', updatedQueue);
           setQueue(updatedQueue || []);
         },
         // Error callback
@@ -62,8 +63,17 @@ const Queue = () => {
       // Connect to the session
       queueService.connect(sessionId);
 
+      // Set up periodic queue refresh
+      const refreshInterval = setInterval(() => {
+        const accessToken = getAccessToken();
+        if (accessToken) {
+          queueService.getQueue(accessToken);
+        }
+      }, 5000); // Refresh every 5 seconds
+
       // Clean up on unmount
       return () => {
+        clearInterval(refreshInterval);
         queueService.disconnect();
       };
     }
@@ -129,8 +139,12 @@ const Queue = () => {
     }
 
     try {
+      setLoading(true);
       await queueService.addToQueue(track, accessToken);
       showNotification(`Added "${track.name}" to queue`);
+      
+      // Refresh queue after adding
+      queueService.getQueue(accessToken);
     } catch (error) {
       console.error('Error adding to queue:', error);
       // Show more specific error message
@@ -140,6 +154,8 @@ const Queue = () => {
           ? 'Failed to add track. Please ensure Spotify is open and playing.'
           : 'Failed to add track to queue';
       showNotification(errorMessage, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -151,11 +167,17 @@ const Queue = () => {
     }
 
     try {
+      setLoading(true);
       await queueService.removeFromQueue(track, accessToken);
       showNotification('Removed track from queue');
+      
+      // Refresh queue after removing
+      queueService.getQueue(accessToken);
     } catch (error) {
       console.error('Error removing from queue:', error);
       showNotification('Failed to remove track from queue', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
