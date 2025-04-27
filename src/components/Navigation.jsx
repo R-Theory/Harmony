@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar,
@@ -13,6 +13,8 @@ import {
   ListItemText,
   useTheme,
   useMediaQuery,
+  Avatar,
+  Box,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -20,13 +22,41 @@ import {
   QueueMusic as QueueIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
+import axios from 'axios';
 
 const Navigation = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      const accessToken = localStorage.getItem('spotify_access_token');
+      if (accessToken) {
+        try {
+          const response = await axios.get('https://api.spotify.com/v1/me', {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+          setUserProfile(response.data);
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+          if (error.response?.status === 401) {
+            localStorage.removeItem('spotify_access_token');
+            localStorage.removeItem('spotify_refresh_token');
+            localStorage.removeItem('spotify_connected');
+            navigate('/settings');
+          }
+        }
+      }
+    };
+
+    fetchUserProfile();
+  }, [navigate]);
 
   const menuItems = [
     { text: 'Home', icon: <HomeIcon />, path: '/' },
@@ -71,6 +101,15 @@ const Navigation = () => {
             >
               <MenuIcon />
             </IconButton>
+          )}
+          {userProfile && (
+            <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
+              <Avatar
+                src={userProfile.images[0]?.url}
+                alt={userProfile.display_name}
+                sx={{ width: 32, height: 32 }}
+              />
+            </Box>
           )}
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Harmony
