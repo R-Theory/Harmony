@@ -143,7 +143,7 @@ export class WebRTCManager {
         console.log('Connected to PeerJS server with ID:', id);
         this.peerId = id;
         this.reconnectAttempts = 0;
-        this.notifyListeners('connected', { id });
+        this.notifyListeners('connected', id);
         resolve();
       });
 

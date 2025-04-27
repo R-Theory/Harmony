@@ -90,7 +90,7 @@ export default function Session() {
         webrtc.addConnectionListener((event, data) => {
           switch (event) {
             case 'connected':
-              setPeerId(data.id);
+              setPeerId(data);
               setIsConnected(true);
               break;
             case 'error':
