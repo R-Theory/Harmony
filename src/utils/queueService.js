@@ -31,7 +31,7 @@ class QueueService {
     
     // Update Socket.IO configuration
     this.socket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],  // Try polling first, then websocket
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -39,7 +39,8 @@ class QueueService {
       autoConnect: true,
       withCredentials: true,
       path: '/api/socket.io',  // Update path to include /api
-      forceNew: true
+      forceNew: true,
+      upgrade: true  // Allow transport upgrade
     });
 
     // Set up event listeners

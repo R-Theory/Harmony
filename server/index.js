@@ -60,14 +60,30 @@ const io = new Server(httpServer, {
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization']
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],  // Try polling first, then websocket
   pingTimeout: 60000,
   pingInterval: 25000,
   connectTimeout: 45000,
-  path: '/api/socket.io',
+  path: '/api/socket.io',  // Update path to match client
   serveClient: false,
   cookie: false,
-  allowEIO3: true
+  allowEIO3: true,  // Allow Engine.IO v3 clients
+  allowUpgrades: true,  // Allow transport upgrades
+  perMessageDeflate: false,  // Disable compression for better performance
+  maxHttpBufferSize: 1e8  // Increase buffer size for large messages
+});
+
+// Add Socket.IO middleware for logging
+io.use((socket, next) => {
+  console.log('Socket.IO connection attempt:', {
+    id: socket.id,
+    handshake: {
+      address: socket.handshake.address,
+      headers: socket.handshake.headers,
+      query: socket.handshake.query
+    }
+  });
+  next();
 });
 
 // Middleware

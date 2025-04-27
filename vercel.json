@@ -15,6 +15,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/socket.io/:path*", "destination": "/server/index.js" },
     { "source": "/api/:path*", "destination": "/server/index.js" },
     { "source": "/assets/:path*", "destination": "/dist/assets/:path*" },
     { "source": "/vite.svg", "destination": "/dist/vite.svg" },
@@ -57,7 +58,11 @@
         },
         {
           "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Accept"
+          "value": "X-Requested-With, Content-Type, Accept, Authorization"
+        },
+        {
+          "key": "Access-Control-Allow-Credentials",
+          "value": "true"
         }
       ]
     }
