@@ -25,20 +25,20 @@ class QueueService {
     // Determine the Socket.IO server URL
     const socketUrl = isLocalhost 
       ? 'http://localhost:3001'
-      : `https://${hostname}`;  // Remove /api from the URL
+      : `https://${hostname}`;
     
     console.log('Connecting to Socket.IO server at:', socketUrl);
     
-    // Update Socket.IO configuration with simpler setup
+    // Update Socket.IO configuration
     this.socket = io(socketUrl, {
-      transports: ['polling'],  // Start with polling only
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/socket.io',  // Use the default Socket.IO path
+      path: '/api/socket.io',  // Use the API path for Vercel
       forceNew: true
     });
 

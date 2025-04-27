@@ -15,8 +15,8 @@
     }
   ],
   "rewrites": [
-    { "source": "/socket.io/(.*)", "destination": "/server/index.js" },
     { "source": "/api/socket.io/(.*)", "destination": "/server/index.js" },
+    { "source": "/socket.io/(.*)", "destination": "/server/index.js" },
     { "source": "/api/:path*", "destination": "/server/index.js" },
     { "source": "/assets/:path*", "destination": "/dist/assets/:path*" },
     { "source": "/vite.svg", "destination": "/dist/vite.svg" },
@@ -25,7 +25,7 @@
   ],
   "headers": [
     {
-      "source": "/socket.io/(.*)",
+      "source": "/api/socket.io/(.*)",
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
@@ -46,7 +46,7 @@
       ]
     },
     {
-      "source": "/api/socket.io/(.*)",
+      "source": "/socket.io/(.*)",
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
