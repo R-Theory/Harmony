@@ -25,7 +25,7 @@ class QueueService {
     // Determine the Socket.IO server URL
     const socketUrl = isLocalhost 
       ? 'http://localhost:3001'
-      : `https://${hostname}/api`;  // Add /api to the URL for production
+      : `https://${hostname}`;  // Remove /api from the URL
     
     console.log('Connecting to Socket.IO server at:', socketUrl);
     
@@ -38,7 +38,7 @@ class QueueService {
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/socket.io',
+      path: '/api/socket.io',  // Update path to include /api
       forceNew: true
     });
 

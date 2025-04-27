@@ -64,9 +64,10 @@ const io = new Server(httpServer, {
   pingTimeout: 60000,
   pingInterval: 25000,
   connectTimeout: 45000,
-  path: '/socket.io',
+  path: '/api/socket.io',
   serveClient: false,
-  cookie: false
+  cookie: false,
+  allowEIO3: true
 });
 
 // Middleware
