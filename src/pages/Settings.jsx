@@ -53,7 +53,17 @@ const Settings = () => {
         console.log('Attempting to connect to:', `${apiBaseUrl}/api/login`);
         const response = await axios.get(`${apiBaseUrl}/api/login`);
         console.log('Login response:', response.data);
-        window.location.href = response.data.url;
+        
+        // Add a delay to see the response
+        if (response.data && response.data.url) {
+          console.log('Spotify auth URL:', response.data.url);
+          // Wait 2 seconds before redirecting
+          setTimeout(() => {
+            window.location.href = response.data.url;
+          }, 2000);
+        } else {
+          console.error('Invalid response format:', response.data);
+        }
       } catch (error) {
         console.error('Error initiating Spotify login:', error);
         // Add more detailed error logging
