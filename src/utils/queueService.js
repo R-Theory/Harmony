@@ -18,14 +18,14 @@ class QueueService {
     this.sessionId = sessionId;
     console.log('Connecting to Socket.IO server...');
     
-    // Get the current hostname
+    // Get the current hostname and determine the API URL
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
     
     // Determine the Socket.IO server URL
     const socketUrl = isLocalhost 
       ? 'http://localhost:3001'
-      : `https://${hostname}`;
+      : `https://${hostname}/api`;  // Add /api to the URL for production
     
     console.log('Connecting to Socket.IO server at:', socketUrl);
     
@@ -38,7 +38,8 @@ class QueueService {
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/socket.io'
+      path: '/socket.io',
+      forceNew: true
     });
 
     // Set up event listeners
