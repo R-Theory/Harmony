@@ -47,15 +47,18 @@ const Queue = () => {
   // Initialize queue service connection
   useEffect(() => {
     if (sessionId) {
+      console.log('Initializing queue service for session:', sessionId);
+      
       // Set up callbacks
       queueService.setCallbacks(
         // Queue update callback
         (updatedQueue) => {
-          console.log('Received queue update:', updatedQueue);
+          console.log('Queue update received in component:', updatedQueue);
           setQueue(updatedQueue || []);
         },
         // Error callback
         (errorMessage) => {
+          console.error('Queue error received in component:', errorMessage);
           showNotification(errorMessage, 'error');
         }
       );
@@ -67,12 +70,14 @@ const Queue = () => {
       const refreshInterval = setInterval(() => {
         const accessToken = getAccessToken();
         if (accessToken) {
+          console.log('Periodic queue refresh');
           queueService.getQueue(accessToken);
         }
       }, 5000); // Refresh every 5 seconds
 
       // Clean up on unmount
       return () => {
+        console.log('Cleaning up queue service');
         clearInterval(refreshInterval);
         queueService.disconnect();
       };
@@ -83,9 +88,13 @@ const Queue = () => {
   useEffect(() => {
     const loadQueue = async () => {
       const accessToken = getAccessToken();
-      if (!accessToken) return;
+      if (!accessToken) {
+        console.log('No access token available for initial queue load');
+        return;
+      }
 
       try {
+        console.log('Loading initial queue');
         setLoading(true);
         
         if (sessionId) {
@@ -139,11 +148,13 @@ const Queue = () => {
     }
 
     try {
+      console.log('Adding track to queue:', track.name);
       setLoading(true);
       await queueService.addToQueue(track, accessToken);
       showNotification(`Added "${track.name}" to queue`);
       
       // Refresh queue after adding
+      console.log('Refreshing queue after adding track');
       queueService.getQueue(accessToken);
     } catch (error) {
       console.error('Error adding to queue:', error);
@@ -167,11 +178,13 @@ const Queue = () => {
     }
 
     try {
+      console.log('Removing track from queue:', track.name);
       setLoading(true);
       await queueService.removeFromQueue(track, accessToken);
       showNotification('Removed track from queue');
       
       // Refresh queue after removing
+      console.log('Refreshing queue after removing track');
       queueService.getQueue(accessToken);
     } catch (error) {
       console.error('Error removing from queue:', error);
