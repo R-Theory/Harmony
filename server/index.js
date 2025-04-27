@@ -58,41 +58,19 @@ const io = new Server(httpServer, {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Credentials']
+    allowedHeaders: ['Content-Type', 'Authorization']
   },
-  transports: ['polling', 'websocket'],  // Try polling first, then websocket
+  transports: ['polling'],  // Use polling only
   pingTimeout: 60000,
   pingInterval: 25000,
   connectTimeout: 45000,
-  path: '/api/socket.io',  // Update path to match client
+  path: '/socket.io',  // Use default Socket.IO path
   serveClient: false,
   cookie: false,
   allowEIO3: true,  // Allow Engine.IO v3 clients
-  allowUpgrades: true,  // Allow transport upgrades
+  allowUpgrades: false,  // Disable transport upgrades
   perMessageDeflate: false,  // Disable compression for better performance
-  maxHttpBufferSize: 1e8,  // Increase buffer size for large messages
-  cors: {
-    origin: function(origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      
-      const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'https://harmony-vert.vercel.app',
-        'https://harmony-v0-1.vercel.app'
-      ];
-      
-      if (allowedOrigins.indexOf(origin) === -1) {
-        const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-        return callback(new Error(msg), false);
-      }
-      return callback(null, true);
-    },
-    credentials: true,
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  }
+  maxHttpBufferSize: 1e8  // Increase buffer size for large messages
 });
 
 // Add Socket.IO middleware for logging and error handling

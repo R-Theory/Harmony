@@ -29,23 +29,17 @@ class QueueService {
     
     console.log('Connecting to Socket.IO server at:', socketUrl);
     
-    // Update Socket.IO configuration
+    // Update Socket.IO configuration with simpler setup
     this.socket = io(socketUrl, {
-      transports: ['polling', 'websocket'],  // Try polling first, then websocket
+      transports: ['polling'],  // Start with polling only
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/api/socket.io',  // Update path to include /api
-      forceNew: true,
-      upgrade: true,  // Allow transport upgrade
-      rejectUnauthorized: false,  // Allow self-signed certificates
-      extraHeaders: {  // Add headers for CORS
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': 'true'
-      }
+      path: '/socket.io',  // Use default Socket.IO path
+      forceNew: true
     });
 
     // Set up event listeners
@@ -69,22 +63,11 @@ class QueueService {
       }
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Disconnected from queue service');
-      this.isConnected = false;
-    });
-
     this.socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
       this.isConnected = false;
       if (this.onError) {
         this.onError('Failed to connect to queue service. Please try refreshing the page.');
-      }
-      // Attempt to reconnect with polling only if websocket fails
-      if (this.socket.io.opts.transports.includes('websocket')) {
-        console.log('Retrying connection with polling only...');
-        this.socket.io.opts.transports = ['polling'];
-        this.socket.connect();
       }
     });
 
@@ -93,6 +76,15 @@ class QueueService {
       this.isConnected = false;
       if (this.onError) {
         this.onError('Queue service error. Please try refreshing the page.');
+      }
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('Disconnected from queue service:', reason);
+      this.isConnected = false;
+      if (reason === 'io server disconnect' || reason === 'io client disconnect') {
+        // Server initiated disconnect, try to reconnect
+        this.socket.connect();
       }
     });
 
