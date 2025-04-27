@@ -5,6 +5,9 @@ import SpotifyWebApi from 'spotify-web-api-node';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 
+// Import queue API routes
+import queueRoutes from './api/queue.js';
+
 dotenv.config();
 
 // Determine if we're in production
@@ -84,15 +87,102 @@ const spotifyApi = new SpotifyWebApi({
 // WebRTC signaling
 const sessions = new Map();
 
+// Queue management
+const sessionQueues = new Map();
+
+// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
+
+  // Join a session
+  socket.on('join-session', (sessionId) => {
+    socket.join(sessionId);
+    console.log(`Client ${socket.id} joined session ${sessionId}`);
+    
+    // Initialize queue for this session if it doesn't exist
+    if (!sessionQueues.has(sessionId)) {
+      sessionQueues.set(sessionId, []);
+    }
+    
+    // Send current queue to the client
+    socket.emit('queue-update', { queue: sessionQueues.get(sessionId) });
+  });
+
+  // Leave a session
+  socket.on('leave-session', (sessionId) => {
+    socket.leave(sessionId);
+    console.log(`Client ${socket.id} left session ${sessionId}`);
+  });
+
+  // Add track to queue
+  socket.on('add-to-queue', async ({ sessionId, track, accessToken }) => {
+    try {
+      // Add to Spotify queue
+      spotifyApi.setAccessToken(accessToken);
+      await spotifyApi.addToQueue(track.uri);
+      
+      // Add to session queue
+      const queue = sessionQueues.get(sessionId) || [];
+      queue.push(track);
+      sessionQueues.set(sessionId, queue);
+      
+      // Broadcast queue update to all clients in the session
+      io.to(sessionId).emit('queue-update', { queue });
+      
+      console.log(`Added track ${track.name} to queue for session ${sessionId}`);
+    } catch (error) {
+      console.error('Error adding to queue:', error);
+      socket.emit('queue-error', { message: 'Failed to add track to queue' });
+    }
+  });
+
+  // Remove track from queue
+  socket.on('remove-from-queue', async ({ sessionId, trackUri, accessToken }) => {
+    try {
+      // Skip to next track in Spotify (workaround since direct queue removal isn't supported)
+      spotifyApi.setAccessToken(accessToken);
+      await spotifyApi.skipToNext();
+      
+      // Remove from session queue
+      const queue = sessionQueues.get(sessionId) || [];
+      const updatedQueue = queue.filter(track => track.uri !== trackUri);
+      sessionQueues.set(sessionId, updatedQueue);
+      
+      // Broadcast queue update to all clients in the session
+      io.to(sessionId).emit('queue-update', { queue: updatedQueue });
+      
+      console.log(`Removed track ${trackUri} from queue for session ${sessionId}`);
+    } catch (error) {
+      console.error('Error removing from queue:', error);
+      socket.emit('queue-error', { message: 'Failed to remove track from queue' });
+    }
+  });
+
+  // Get current queue
+  socket.on('get-queue', async ({ sessionId, accessToken }) => {
+    try {
+      // Get Spotify queue
+      spotifyApi.setAccessToken(accessToken);
+      const queueData = await spotifyApi.getMyCurrentQueue();
+      
+      // Update session queue
+      sessionQueues.set(sessionId, queueData.body.queue || []);
+      
+      // Send queue to the client
+      socket.emit('queue-update', { queue: queueData.body.queue || [] });
+    } catch (error) {
+      console.error('Error getting queue:', error);
+      socket.emit('queue-error', { message: 'Failed to get queue' });
+    }
+  });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });
-
-  // Add any additional socket event handlers here
 });
+
+// Use queue API routes
+app.use('/api', queueRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

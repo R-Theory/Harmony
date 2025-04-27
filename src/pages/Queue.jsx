@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import {
   Box,
   List,
@@ -11,36 +11,159 @@ import {
   TextField,
   Paper,
   useTheme,
+  CircularProgress,
+  Divider,
+  ListItemAvatar,
+  Avatar,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   Add as AddIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
+import { searchTracks } from '../utils/spotify';
+import { queueService } from '../utils/queueService';
+import { useParams } from 'react-router-dom';
 
 const Queue = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [queue, setQueue] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
   const theme = useTheme();
+  const { sessionId } = useParams();
 
-  // Placeholder queue data - will be replaced with actual state management
-  const [queue] = useState([
-    { id: 1, title: 'Song 1', artist: 'Artist 1', duration: '3:45' },
-    { id: 2, title: 'Song 2', artist: 'Artist 2', duration: '4:20' },
-  ]);
-
-  const handleSearch = () => {
-    // TODO: Implement Spotify search
-    console.log('Searching for:', searchQuery);
+  // Get access token from URL or localStorage
+  const getAccessToken = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('access_token') || localStorage.getItem('spotify_access_token');
+    return token;
   };
 
-  const handleRemoveFromQueue = (id) => {
-    // TODO: Implement remove from queue
-    console.log('Removing song:', id);
+  // Initialize queue service connection
+  useEffect(() => {
+    if (sessionId) {
+      // Set up callbacks
+      queueService.setCallbacks(
+        // Queue update callback
+        (updatedQueue) => {
+          setQueue(updatedQueue || []);
+        },
+        // Error callback
+        (errorMessage) => {
+          showNotification(errorMessage, 'error');
+        }
+      );
+
+      // Connect to the session
+      queueService.connect(sessionId);
+
+      // Clean up on unmount
+      return () => {
+        queueService.disconnect();
+      };
+    }
+  }, [sessionId]);
+
+  // Load initial queue
+  useEffect(() => {
+    const loadQueue = async () => {
+      const accessToken = getAccessToken();
+      if (!accessToken) return;
+
+      try {
+        setLoading(true);
+        
+        if (sessionId) {
+          queueService.getQueue(accessToken);
+        }
+      } catch (error) {
+        console.error('Error loading queue:', error);
+        showNotification('Failed to load queue', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadQueue();
+  }, [sessionId]);
+
+  const showNotification = (message, severity = 'success') => {
+    setNotification({ open: true, message, severity });
+  };
+
+  const handleCloseNotification = () => {
+    setNotification({ ...notification, open: false });
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      showNotification('Please log in to Spotify first', 'error');
+      return;
+    }
+
+    try {
+      setSearching(true);
+      const results = await searchTracks(searchQuery, accessToken);
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Error searching tracks:', error);
+      showNotification('Failed to search tracks', 'error');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleAddToQueue = async (track) => {
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      showNotification('Please log in to Spotify first', 'error');
+      return;
+    }
+
+    try {
+      await queueService.addToQueue(track, accessToken);
+      showNotification(`Added "${track.name}" to queue`);
+    } catch (error) {
+      console.error('Error adding to queue:', error);
+      showNotification('Failed to add track to queue', 'error');
+    }
+  };
+
+  const handleRemoveFromQueue = async (track) => {
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      showNotification('Please log in to Spotify first', 'error');
+      return;
+    }
+
+    try {
+      await queueService.removeFromQueue(track, accessToken);
+      showNotification('Removed track from queue');
+    } catch (error) {
+      console.error('Error removing from queue:', error);
+      showNotification('Failed to remove track from queue', 'error');
+    }
+  };
+
+  // Format duration from milliseconds to MM:SS
+  const formatDuration = (ms) => {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Queue
+        {sessionId ? `Session Queue` : 'My Queue'}
       </Typography>
 
       {/* Search Section */}
@@ -57,54 +180,123 @@ const Queue = () => {
           <Button
             variant="contained"
             onClick={handleSearch}
-            startIcon={<AddIcon />}
+            startIcon={searching ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+            disabled={searching}
           >
-            Add
+            Search
           </Button>
         </Box>
       </Paper>
 
-      {/* Queue List */}
+      {/* Search Results */}
+      {searchResults.length > 0 && (
+        <Paper sx={{ mb: 3, backgroundColor: theme.palette.background.paper }}>
+          <Typography variant="h6" sx={{ p: 2 }}>
+            Search Results
+          </Typography>
+          <List>
+            {searchResults.map((track) => (
+              <ListItem
+                key={track.id}
+                divider
+                sx={{
+                  '&:last-child': {
+                    borderBottom: 0,
+                  },
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar 
+                    alt={track.name} 
+                    src={track.album.images[0]?.url} 
+                    variant="rounded"
+                  />
+                </ListItemAvatar>
+                <ListItemText
+                  primary={track.name}
+                  secondary={`${track.artists.map(artist => artist.name).join(', ')} • ${formatDuration(track.duration_ms)}`}
+                />
+                <ListItemSecondaryAction>
+                  <IconButton
+                    edge="end"
+                    aria-label="add"
+                    onClick={() => handleAddToQueue(track)}
+                  >
+                    <AddIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        </Paper>
+      )}
+
+      {/* Queue */}
       <Paper sx={{ backgroundColor: theme.palette.background.paper }}>
-        <List>
-          {queue.map((song) => (
-            <ListItem
-              key={song.id}
-              divider
-              sx={{
-                '&:last-child': {
-                  borderBottom: 0,
-                },
-              }}
-            >
-              <ListItemText
-                primary={song.title}
-                secondary={song.artist}
-              />
-              <ListItemSecondaryAction>
-                <Typography variant="body2" color="text.secondary" sx={{ mr: 2 }}>
-                  {song.duration}
-                </Typography>
-                <IconButton
-                  edge="end"
-                  aria-label="delete"
-                  onClick={() => handleRemoveFromQueue(song.id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </ListItemSecondaryAction>
-            </ListItem>
-          ))}
-          {queue.length === 0 && (
-            <ListItem>
-              <ListItemText
-                primary="No songs in queue"
-                secondary="Search and add songs to get started"
-              />
-            </ListItem>
-          )}
-        </List>
+        <Typography variant="h6" sx={{ p: 2 }}>
+          {loading ? 'Loading Queue...' : 'Current Queue'}
+        </Typography>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : queue.length === 0 ? (
+          <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+            Queue is empty. Search for songs to add them to the queue.
+          </Typography>
+        ) : (
+          <List>
+            {queue.map((track) => (
+              <ListItem
+                key={track.id}
+                divider
+                sx={{
+                  '&:last-child': {
+                    borderBottom: 0,
+                  },
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar 
+                    alt={track.name} 
+                    src={track.album.images[0]?.url} 
+                    variant="rounded"
+                  />
+                </ListItemAvatar>
+                <ListItemText
+                  primary={track.name}
+                  secondary={`${track.artists.map(artist => artist.name).join(', ')} • ${formatDuration(track.duration_ms)}`}
+                />
+                <ListItemSecondaryAction>
+                  <IconButton
+                    edge="end"
+                    aria-label="delete"
+                    onClick={() => handleRemoveFromQueue(track)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        )}
       </Paper>
+
+      {/* Notification */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleCloseNotification}
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

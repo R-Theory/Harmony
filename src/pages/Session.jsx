@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -19,6 +19,9 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Tabs,
+  Tab,
+  CircularProgress,
 } from '@mui/material';
 import {
   Mic as MicIcon,
@@ -32,9 +35,32 @@ import {
   WifiOff as WifiOffIcon,
   Computer as ComputerIcon,
   Help as HelpIcon,
+  QueueMusic as QueueMusicIcon,
 } from '@mui/icons-material';
 import { QRCodeSVG } from 'qrcode.react';
 import webrtc from '../utils/webrtc';
+import Queue from './Queue';
+
+// TabPanel component for the tabs
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`session-tabpanel-${index}`}
+      aria-labelledby={`session-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
 
 export default function Session() {
   const { sessionId } = useParams();
@@ -50,6 +76,7 @@ export default function Session() {
   const [peerId, setPeerId] = useState(null);
   const [showQrCode, setShowQrCode] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [tabValue, setTabValue] = useState(0);
   
   const audioRef = React.useRef(null);
   const peerStreamRef = React.useRef(null);
@@ -58,6 +85,11 @@ export default function Session() {
   const getSessionUrl = () => {
     const baseUrl = window.location.origin;
     return peerId ? `${baseUrl}/session/${peerId}` : '';
+  };
+  
+  // Handle tab change
+  const handleTabChange = (event, newValue) => {
+    setTabValue(newValue);
   };
   
   useEffect(() => {
@@ -371,6 +403,35 @@ export default function Session() {
             </Grid>
           )}
         </Grid>
+      </Paper>
+
+      {/* Tabs for different sections */}
+      <Paper sx={{ mt: 3 }}>
+        <Tabs
+          value={tabValue}
+          onChange={handleTabChange}
+          indicatorColor="primary"
+          textColor="primary"
+          variant="fullWidth"
+        >
+          <Tab label="Session Info" />
+          <Tab label="Queue" icon={<QueueMusicIcon />} iconPosition="start" />
+        </Tabs>
+
+        <TabPanel value={tabValue} index={0}>
+          <Typography variant="body1">
+            This is a collaborative listening session. All participants will hear the same music.
+          </Typography>
+          <Typography variant="body1" sx={{ mt: 2 }}>
+            {isHost 
+              ? "As the host, you control the music playback. Guests will hear what you play." 
+              : "As a guest, you'll hear the music that the host plays."}
+          </Typography>
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={1}>
+          <Queue />
+        </TabPanel>
       </Paper>
 
       <Dialog 
