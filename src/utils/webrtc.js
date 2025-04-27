@@ -296,6 +296,10 @@ export class WebRTCManager {
 
   addConnectionListener(listener) {
     this.connectionListeners.add(listener);
+    // If already connected, immediately notify the new listener
+    if (this.peer && this.peer.open && this.peerId) {
+      listener('connected', this.peerId);
+    }
   }
 
   removeConnectionListener(listener) {
