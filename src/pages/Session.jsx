@@ -31,7 +31,6 @@ import {
   Error as ErrorIcon,
   WifiOff as WifiOffIcon,
   Computer as ComputerIcon,
-  MicOff as MicOffIcon,
   Help as HelpIcon,
 } from '@mui/icons-material';
 import { QRCodeSVG } from 'qrcode.react';
