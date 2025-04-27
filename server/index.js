@@ -56,21 +56,27 @@ const allowedOrigins = getAllowedOrigins();
 const io = new Server(httpServer, {
   path: '/socket.io',
   cors: {
-    origin: '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
   },
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  connectTimeout: 45000
 });
 
-// Add Socket.IO middleware for logging and error handling
+// Add more detailed Socket.IO middleware for logging and error handling
 io.use((socket, next) => {
   console.log('Socket.IO connection attempt:', {
     id: socket.id,
     handshake: {
       address: socket.handshake.address,
       headers: socket.handshake.headers,
-      query: socket.handshake.query
+      query: socket.handshake.query,
+      url: socket.handshake.url,
+      time: new Date().toISOString()
     }
   });
   
@@ -82,9 +88,14 @@ io.use((socket, next) => {
   next();
 });
 
-// Add error handling for the Socket.IO server
+// Add more detailed error handling for the Socket.IO server
 io.engine.on('connection_error', (err) => {
-  console.error('Socket.IO connection error:', err);
+  console.error('Socket.IO connection error:', {
+    error: err.message,
+    code: err.code,
+    context: err.context,
+    time: new Date().toISOString()
+  });
 });
 
 // Middleware
