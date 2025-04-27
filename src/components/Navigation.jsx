@@ -33,7 +33,14 @@ const Navigation = () => {
   const location = useLocation();
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
+    const loadUserProfile = async () => {
+      // First try to get the profile from localStorage
+      const storedProfile = localStorage.getItem('spotify_user_profile');
+      if (storedProfile) {
+        setUserProfile(JSON.parse(storedProfile));
+      }
+
+      // Then verify/update the profile with a fresh API call
       const accessToken = localStorage.getItem('spotify_access_token');
       if (accessToken) {
         try {
@@ -43,19 +50,21 @@ const Navigation = () => {
             }
           });
           setUserProfile(response.data);
+          localStorage.setItem('spotify_user_profile', JSON.stringify(response.data));
         } catch (error) {
           console.error('Error fetching user profile:', error);
           if (error.response?.status === 401) {
             localStorage.removeItem('spotify_access_token');
             localStorage.removeItem('spotify_refresh_token');
             localStorage.removeItem('spotify_connected');
+            localStorage.removeItem('spotify_user_profile');
             navigate('/settings');
           }
         }
       }
     };
 
-    fetchUserProfile();
+    loadUserProfile();
   }, [navigate]);
 
   const menuItems = [
@@ -105,7 +114,7 @@ const Navigation = () => {
           {userProfile && (
             <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
               <Avatar
-                src={userProfile.images[0]?.url}
+                src={userProfile.images?.[0]?.url}
                 alt={userProfile.display_name}
                 sx={{ width: 32, height: 32 }}
               />
@@ -139,7 +148,7 @@ const Navigation = () => {
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
+          keepMounted: true,
         }}
         sx={{
           display: { xs: 'block', sm: 'none' },

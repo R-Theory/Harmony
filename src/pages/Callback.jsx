@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
+import axios from 'axios';
 
 const Callback = () => {
   const navigate = useNavigate();
@@ -19,15 +20,35 @@ const Callback = () => {
       }
 
       if (access_token && refresh_token) {
-        // Store tokens in localStorage
-        localStorage.setItem('spotify_access_token', access_token);
-        localStorage.setItem('spotify_refresh_token', refresh_token);
-        
-        // Update connection status
-        localStorage.setItem('spotify_connected', 'true');
-        
-        // After successful authentication, redirect to home
-        navigate('/');
+        try {
+          // Store tokens in localStorage
+          localStorage.setItem('spotify_access_token', access_token);
+          localStorage.setItem('spotify_refresh_token', refresh_token);
+          localStorage.setItem('spotify_connected', 'true');
+          
+          // Fetch user profile to verify token works
+          const response = await axios.get('https://api.spotify.com/v1/me', {
+            headers: {
+              'Authorization': `Bearer ${access_token}`
+            }
+          });
+          
+          // Store user profile in localStorage for immediate access
+          localStorage.setItem('spotify_user_profile', JSON.stringify(response.data));
+          
+          // After successful authentication, redirect to home
+          navigate('/');
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+          // If we get a 401, the token is invalid
+          if (error.response?.status === 401) {
+            localStorage.removeItem('spotify_access_token');
+            localStorage.removeItem('spotify_refresh_token');
+            localStorage.removeItem('spotify_connected');
+            localStorage.removeItem('spotify_user_profile');
+            navigate('/settings');
+          }
+        }
       } else {
         navigate('/settings');
       }
