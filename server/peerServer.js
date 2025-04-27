@@ -10,6 +10,10 @@ export function setupPeerServer(server) {
     proxied: true,
     pingInterval: 5000,
     pingTimeout: 3000,
+    ssl: isProd ? {
+      key: process.env.SSL_KEY,
+      cert: process.env.SSL_CERT
+    } : undefined,
     generateClientId: () => {
       // Generate a random string of 16 characters
       return Math.random().toString(36).substring(2, 15) + 

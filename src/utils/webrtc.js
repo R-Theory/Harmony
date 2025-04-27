@@ -36,10 +36,10 @@ export class WebRTCManager {
       const { iceServers } = await iceResponse.json();
 
       const config = {
-        host,
-        port,
+        host: isProd ? window.location.hostname : 'localhost',
+        port: isProd ? 443 : 3000,
         path: '/peerjs',
-        secure: true, // Always use secure for Vercel
+        secure: isProd,
         debug: !isProd,
         config: {
           iceServers,
@@ -48,15 +48,9 @@ export class WebRTCManager {
         pingInterval: PING_INTERVAL
       };
 
-      console.log('Initializing PeerJS with config:', {
-        host,
-        port,
-        path: '/peerjs',
-        secure: true,
-        iceServers: config.config.iceServers
-      });
+      console.log('Initializing PeerJS with config:', config);
       
-      this.peer = new Peer(config);
+      this.peer = new Peer(null, config); // Let PeerJS generate the ID
       await this.setupEventListeners();
     } catch (error) {
       const enhancedError = this.enhanceError(error, WebRTCErrorTypes.SERVER_CONNECTION);
