@@ -1,23 +1,14 @@
 @echo off
-cls
-echo Deploying Harmony to production...
+REM Prompt for a commit message
+set /p msg="Enter commit message: "
 
-cd "C:\Programing\Harmony (v0.1)"
-if %ERRORLEVEL% NEQ 0 (
-    echo Error: Could not change to project directory.
-    pause
-    exit /b 1
-)
+REM Add all changes
+git add .
 
-echo Are you sure you want to deploy to production?
-echo This will make your application available to all users.
-set /p confirm=Type 'yes' to confirm: 
+REM Commit with the provided message
+git commit -m "%msg%"
 
-if /i "%confirm%"=="yes" (
-    echo Deploying to production...
-    vercel --prod
-) else (
-    echo Deployment cancelled.
-)
+REM Push to the current branch
+git push
 
 pause
