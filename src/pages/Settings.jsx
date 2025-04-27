@@ -29,8 +29,8 @@ const Settings = () => {
     if (window.location.hostname === 'localhost') {
       return 'http://localhost:3000';
     }
-    // For production, use the same hostname but with the API subdomain
-    return `https://api.${window.location.hostname}`;
+    // For production, use the same domain
+    return window.location.origin;
   };
 
   useEffect(() => {
@@ -50,10 +50,17 @@ const Settings = () => {
     } else {
       try {
         const apiBaseUrl = getApiBaseUrl();
+        console.log('Attempting to connect to:', `${apiBaseUrl}/api/login`);
         const response = await axios.get(`${apiBaseUrl}/api/login`);
+        console.log('Login response:', response.data);
         window.location.href = response.data.url;
       } catch (error) {
         console.error('Error initiating Spotify login:', error);
+        // Add more detailed error logging
+        if (error.response) {
+          console.error('Error response:', error.response.data);
+          console.error('Error status:', error.response.status);
+        }
       }
     }
   };
