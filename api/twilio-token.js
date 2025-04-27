@@ -1,3 +1,5 @@
+import twilio from 'twilio';
+
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -19,18 +21,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Using free public STUN/TURN servers
-    const iceServers = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' }
-    ];
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
 
-    res.status(200).json({ iceServers });
+    if (!accountSid || !authToken) {
+      throw new Error('Twilio credentials not configured');
+    }
+
+    const client = twilio(accountSid, authToken);
+    const token = await client.tokens.create();
+
+    // Return only the ICE servers configuration
+    return res.status(200).json({ 
+      iceServers: token.iceServers
+    });
   } catch (error) {
-    console.error('Error providing ICE servers:', error);
-    res.status(500).json({ error: 'Failed to provide ICE servers' });
+    console.error('Error fetching Twilio token:', error);
+    return res.status(500).json({ 
+      error: 'Failed to fetch TURN credentials',
+      details: error.message 
+    });
   }
 } 
