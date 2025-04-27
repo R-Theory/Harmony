@@ -15,7 +15,6 @@
     }
   ],
   "rewrites": [
-    { "source": "/socket.io/(.*)", "destination": "/server/index.js" },
     { "source": "/api/socket.io/(.*)", "destination": "/server/index.js" },
     { "source": "/api/:path*", "destination": "/server/index.js" },
     { "source": "/assets/:path*", "destination": "/dist/assets/:path*" },
@@ -24,27 +23,6 @@
     { "source": "/(.*)", "destination": "/" }
   ],
   "headers": [
-    {
-      "source": "/socket.io/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET,POST,OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With,Content-Type,Accept,Authorization"
-        },
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        }
-      ]
-    },
     {
       "source": "/api/socket.io/(.*)",
       "headers": [

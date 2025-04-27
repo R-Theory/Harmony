@@ -38,7 +38,7 @@ class QueueService {
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/socket.io',  // Use default Socket.IO path
+      path: '/api/socket.io',  // Use the API path for Vercel
       forceNew: true
     });
 

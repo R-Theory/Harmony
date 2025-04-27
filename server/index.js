@@ -64,7 +64,7 @@ const io = new Server(httpServer, {
   pingTimeout: 60000,
   pingInterval: 25000,
   connectTimeout: 45000,
-  path: '/socket.io',  // Use default Socket.IO path
+  path: '/api/socket.io',  // Use the API path for Vercel
   serveClient: false,
   cookie: false,
   allowEIO3: true,  // Allow Engine.IO v3 clients
