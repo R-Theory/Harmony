@@ -15,11 +15,10 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/server/index.js" },
+    { "source": "/(.*)", "destination": "/" },
     { "source": "/assets/:path*", "destination": "/dist/assets/:path*" },
     { "source": "/vite.svg", "destination": "/dist/vite.svg" },
-    { "source": "/callback", "destination": "/dist/index.html" },
-    { "source": "/(.*)", "destination": "/dist/index.html" }
+    { "source": "/callback", "destination": "/dist/index.html" }
   ],
   "headers": [
     {
