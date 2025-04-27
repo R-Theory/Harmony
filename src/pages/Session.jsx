@@ -57,7 +57,7 @@ export default function Session() {
   // Get the current URL for the QR code
   const getSessionUrl = () => {
     const baseUrl = window.location.origin;
-    return `${baseUrl}/session/${peerId}`;
+    return peerId ? `${baseUrl}/session/${peerId}` : '';
   };
   
   useEffect(() => {
@@ -298,14 +298,20 @@ export default function Session() {
             <Typography>
               Your ID: {peerId}
             </Typography>
-            {isHost ? (
+            {isHost && peerId && (
               <Typography>
                 Share this ID with guests to join: {peerId}
                 <IconButton onClick={() => setShowQrCode(true)}>
                   <QrCodeIcon />
                 </IconButton>
               </Typography>
-            ) : (
+            )}
+            {!peerId && isHost && (
+              <Typography color="text.secondary">
+                Waiting for PeerJS connection...
+              </Typography>
+            )}
+            {!isHost && (
               <Typography>
                 Connected to host: {sessionId}
               </Typography>
@@ -384,24 +390,32 @@ export default function Session() {
             <Typography variant="body1" align="center" color="text.secondary">
               Scan this QR code with your mobile device to join the session
             </Typography>
-            <Box 
-              sx={{ 
-                p: 2, 
-                bgcolor: 'white', 
-                borderRadius: 1,
-                boxShadow: 1
-              }}
-            >
-              <QRCodeSVG 
-                value={getSessionUrl()} 
-                size={256}
-                level="H"
-                includeMargin={true}
-              />
-            </Box>
-            <Typography variant="body2" align="center" color="text.secondary">
-              Or share this link: {getSessionUrl()}
-            </Typography>
+            {peerId ? (
+              <Box 
+                sx={{ 
+                  p: 2, 
+                  bgcolor: 'white', 
+                  borderRadius: 1,
+                  boxShadow: 1
+                }}
+              >
+                <QRCodeSVG 
+                  value={getSessionUrl()} 
+                  size={256}
+                  level="H"
+                  includeMargin={true}
+                />
+              </Box>
+            ) : (
+              <Typography color="text.secondary">
+                Waiting for PeerJS connection...
+              </Typography>
+            )}
+            {peerId && (
+              <Typography variant="body2" align="center" color="text.secondary">
+                Or share this link: {getSessionUrl()}
+              </Typography>
+            )}
           </Box>
         </DialogContent>
       </Dialog>
