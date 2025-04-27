@@ -46,16 +46,13 @@ npm install
 
 # Start the development server
 npm run dev
-
-# Start the backend server (only needed for local development)
-npm run server
 ```
 
 ## Architecture
 
 - Frontend: React with Vite
 - Backend: Express.js (serverless on Vercel)
-- Real-time communication: WebRTC with PeerJS
+- Real-time communication: WebRTC with PeerJS (using public PeerJS server)
 - Music integration: Spotify Web API
 
 ## License

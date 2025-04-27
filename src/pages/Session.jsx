@@ -61,14 +61,27 @@ export default function Session() {
   };
   
   useEffect(() => {
+    // Determine if this user is the host
+    let userIsHost = false;
+    if (sessionId === 'new') {
+      userIsHost = true;
+      localStorage.setItem('isHost', 'true');
+      console.log('[Session] sessionId is "new". Setting isHost to true.');
+    } else if (localStorage.getItem('isHost') === 'true') {
+      userIsHost = true;
+      console.log('[Session] isHost found in localStorage. Setting isHost to true.');
+    } else {
+      userIsHost = false;
+      localStorage.removeItem('isHost');
+      console.log('[Session] isHost not found. Setting isHost to false and removing from localStorage.');
+    }
+    setIsHost(userIsHost);
+    console.log('[Session] useEffect: userIsHost:', userIsHost, 'sessionId:', sessionId);
+
     const initializeSession = async () => {
       try {
         setIsInitializing(true);
         setError(null);
-
-        // Check if we're joining an existing session
-        const isJoining = sessionId && sessionId !== 'new';
-        setIsHost(!isJoining);
 
         // Initialize WebRTC
         await webrtc.initialize();
@@ -77,22 +90,69 @@ export default function Session() {
         webrtc.addConnectionListener((event, data) => {
           switch (event) {
             case 'connected':
-              setPeerId(data);
+              setPeerId(data.id);
               setIsConnected(true);
               break;
             case 'error':
               console.error('WebRTC error:', data);
-              setError(data.message || 'Connection error occurred');
+              
+              // If it's a peer connection error, show a more specific message
+              if (data.type === 'PEER_CONNECTION') {
+                // Check if we're on a potentially restricted network
+                const isRestrictedNetwork = window.location.hostname.includes('edu') || 
+                                           window.location.hostname.includes('school') ||
+                                           /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/.test(window.location.hostname);
+                
+                if (isRestrictedNetwork) {
+                  setError(
+                    `Unable to connect to the host. This may be due to network restrictions on your school/work WiFi. ` +
+                    `Try using a different network or a mobile hotspot. If you're the host, make sure to wait a few seconds ` +
+                    `after creating the session before sharing the link.`
+                  );
+                } else {
+                  setError(
+                    `Unable to connect to the host. The host may be offline or the session ID may be incorrect. ` +
+                    `If you're the host, make sure to wait a few seconds after creating the session before sharing the link.`
+                  );
+                }
+              } else {
+                setError(data.message || 'Connection error occurred');
+              }
               break;
-            case 'maxReconnectAttempts':
-              setError('Connection lost. Max reconnection attempts reached.');
+            case 'disconnected':
+              setIsConnected(false);
+              setError('Connection to the server was lost. Attempting to reconnect...');
               break;
           }
         });
 
-        // If joining, connect to the host
-        if (isJoining) {
-          await webrtc.connect(sessionId);
+        // Only connect if this user is a guest
+        if (!userIsHost && sessionId && sessionId !== 'new') {
+          try {
+            console.log('[Session] Guest detected. Attempting to connect to host with ID:', sessionId);
+            await webrtc.connect(sessionId);
+            console.log('[Session] Successfully connected to host:', sessionId);
+          } catch (error) {
+            console.error(`Failed to connect to host: ${sessionId}`, error);
+            
+            // Check if we're on a potentially restricted network
+            const isRestrictedNetwork = window.location.hostname.includes('edu') || 
+                                       window.location.hostname.includes('school') ||
+                                       /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/.test(window.location.hostname);
+            
+            if (isRestrictedNetwork) {
+              setError(
+                `Failed to connect to the host. This may be due to network restrictions on your school/work WiFi. ` +
+                `Try using a different network or a mobile hotspot.`
+              );
+            } else {
+              setError(
+                `Failed to connect to the host. The host may be offline or the session ID may be incorrect.`
+              );
+            }
+          }
+        } else {
+          console.log('[Session] Host detected. Not connecting to any peer.');
         }
 
         // Set up data callback
@@ -117,6 +177,8 @@ export default function Session() {
     // Cleanup
     return () => {
       webrtc.destroy();
+      localStorage.removeItem('isHost');
+      console.log('[Session] Cleanup: webrtc destroyed and isHost removed from localStorage.');
     };
   }, [sessionId]);
   

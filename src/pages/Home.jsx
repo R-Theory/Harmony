@@ -91,7 +91,9 @@ const Home = () => {
       });
       return;
     }
-    
+    // Remove host flag if joining as guest
+    localStorage.removeItem('isHost');
+    console.log('[Home] Joining session as guest. isHost removed. sessionId:', sessionId);
     // Navigate to the session page
     navigate(`/session/${sessionId}`);
   };
@@ -99,7 +101,9 @@ const Home = () => {
   const handleCreateSession = () => {
     // Generate a unique session ID
     const newSessionId = uuidv4();
-    
+    // Set host flag before navigating
+    localStorage.setItem('isHost', 'true');
+    console.log('[Home] Creating session as host. isHost set to true. newSessionId:', newSessionId);
     // Navigate to the session page
     navigate(`/session/${newSessionId}`);
   };
