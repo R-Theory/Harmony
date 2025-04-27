@@ -55,23 +55,33 @@ const Queue = () => {
         (updatedQueue) => {
           console.log('Queue update received in component:', updatedQueue);
           setQueue(updatedQueue || []);
+          setLoading(false);
         },
         // Error callback
         (errorMessage) => {
           console.error('Queue error received in component:', errorMessage);
           showNotification(errorMessage, 'error');
+          setLoading(false);
         }
       );
 
       // Connect to the session
       queueService.connect(sessionId);
 
-      // Set up periodic queue refresh
+      // Set up periodic queue refresh with error handling
       const refreshInterval = setInterval(() => {
         const accessToken = getAccessToken();
-        if (accessToken) {
+        if (accessToken && queueService.isConnected) {
           console.log('Periodic queue refresh');
-          queueService.getQueue(accessToken);
+          try {
+            queueService.getQueue(accessToken);
+          } catch (error) {
+            console.error('Error during periodic queue refresh:', error);
+            if (error.message.includes('Socket connection is not active')) {
+              // Try to reconnect
+              queueService.connect(sessionId);
+            }
+          }
         }
       }, 5000); // Refresh every 5 seconds
 
@@ -97,13 +107,15 @@ const Queue = () => {
         console.log('Loading initial queue');
         setLoading(true);
         
-        if (sessionId) {
+        if (sessionId && queueService.isConnected) {
           queueService.getQueue(accessToken);
+        } else {
+          console.log('Queue service not connected, attempting to connect...');
+          queueService.connect(sessionId);
         }
       } catch (error) {
         console.error('Error loading queue:', error);
-        showNotification('Failed to load queue', 'error');
-      } finally {
+        showNotification('Failed to load queue. Please try refreshing the page.', 'error');
         setLoading(false);
       }
     };

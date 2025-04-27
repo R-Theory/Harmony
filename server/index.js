@@ -40,20 +40,26 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? process.env.VERCEL_URL 
+      ? [process.env.VERCEL_URL, 'https://harmony-v0-1.vercel.app']
       : ['http://localhost:5173', 'http://localhost:8080'],
     methods: ['GET', 'POST'],
-    credentials: true
-  }
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+  },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  connectTimeout: 45000
 });
 
 // Middleware
 app.use(cors({
   origin: isProd 
     ? [vercelDomain, 'https://harmony-v0-1.vercel.app'] 
-    : ['http://localhost:5173', 'http://172.20.10.2:5173', 'http://10.100.11.132:8080'],
+    : ['http://localhost:5173', 'http://localhost:8080'],
   methods: ['GET', 'POST'],
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 

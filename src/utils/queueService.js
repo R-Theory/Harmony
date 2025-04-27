@@ -17,7 +17,17 @@ class QueueService {
 
     this.sessionId = sessionId;
     console.log('Connecting to Socket.IO server...');
-    this.socket = io();
+    
+    // Update Socket.IO configuration to match server
+    this.socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      autoConnect: true,
+      withCredentials: true
+    });
 
     // Set up event listeners
     this.socket.on('connect', () => {
@@ -48,6 +58,29 @@ class QueueService {
     this.socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
       this.isConnected = false;
+      if (this.onError) {
+        this.onError('Failed to connect to queue service. Please try refreshing the page.');
+      }
+    });
+
+    // Handle reconnection
+    this.socket.on('reconnect', (attemptNumber) => {
+      console.log('Reconnected to queue service after', attemptNumber, 'attempts');
+      this.isConnected = true;
+      if (this.sessionId) {
+        this.socket.emit('join-session', this.sessionId);
+      }
+    });
+
+    this.socket.on('reconnect_error', (error) => {
+      console.error('Socket reconnection error:', error);
+    });
+
+    this.socket.on('reconnect_failed', () => {
+      console.error('Socket reconnection failed');
+      if (this.onError) {
+        this.onError('Failed to reconnect to queue service. Please try refreshing the page.');
+      }
     });
   }
 
