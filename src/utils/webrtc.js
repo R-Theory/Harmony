@@ -25,7 +25,7 @@ export class WebRTCManager {
     this.lastError = null;
   }
 
-  async initialize() {
+  async initialize(peerId = null) {
     const isProd = process.env.NODE_ENV === 'production';
 
     try {
@@ -68,10 +68,11 @@ export class WebRTCManager {
         port: 443,
         path: '/',
         secure: true,
-        iceServers: config.config.iceServers
+        iceServers: config.config.iceServers,
+        peerId
       });
       
-      this.peer = new Peer(null, config); // Let PeerJS generate the ID
+      this.peer = new Peer(peerId, config); // Use peerId if provided
       await this.setupEventListeners();
     } catch (error) {
       const enhancedError = this.enhanceError(error, WebRTCErrorTypes.SERVER_CONNECTION);

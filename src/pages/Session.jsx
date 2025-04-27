@@ -84,7 +84,11 @@ export default function Session() {
         setError(null);
 
         // Initialize WebRTC
-        await webrtc.initialize();
+        if (userIsHost && sessionId && sessionId !== 'new') {
+          await webrtc.initialize(sessionId); // Host uses sessionId as PeerJS ID
+        } else {
+          await webrtc.initialize(); // Guest or fallback
+        }
         
         // Set up connection listeners
         webrtc.addConnectionListener((event, data) => {
