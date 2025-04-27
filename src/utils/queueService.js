@@ -18,15 +18,27 @@ class QueueService {
     this.sessionId = sessionId;
     console.log('Connecting to Socket.IO server...');
     
-    // Update Socket.IO configuration to match server
-    this.socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001', {
+    // Get the current hostname
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    // Determine the Socket.IO server URL
+    const socketUrl = isLocalhost 
+      ? 'http://localhost:3001'
+      : `https://${hostname}`;
+    
+    console.log('Connecting to Socket.IO server at:', socketUrl);
+    
+    // Update Socket.IO configuration
+    this.socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000,
       autoConnect: true,
-      withCredentials: true
+      withCredentials: true,
+      path: '/socket.io'
     });
 
     // Set up event listeners

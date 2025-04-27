@@ -36,12 +36,26 @@ console.log('Environment check:', {
 const app = express();
 const httpServer = createServer(app);
 
+// Determine allowed origins based on environment
+const getAllowedOrigins = () => {
+  if (process.env.NODE_ENV === 'production') {
+    const origins = [
+      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+      'https://harmony-v0-1.vercel.app',
+      'https://harmony-vert.vercel.app'
+    ].filter(Boolean);
+    console.log('Production allowed origins:', origins);
+    return origins;
+  }
+  return ['http://localhost:5173', 'http://localhost:8080'];
+};
+
+const allowedOrigins = getAllowedOrigins();
+
 // Set up Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? [process.env.VERCEL_URL, 'https://harmony-v0-1.vercel.app']
-      : ['http://localhost:5173', 'http://localhost:8080'],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -49,14 +63,13 @@ const io = new Server(httpServer, {
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
-  connectTimeout: 45000
+  connectTimeout: 45000,
+  path: '/socket.io'
 });
 
 // Middleware
 app.use(cors({
-  origin: isProd 
-    ? [vercelDomain, 'https://harmony-v0-1.vercel.app'] 
-    : ['http://localhost:5173', 'http://localhost:8080'],
+  origin: allowedOrigins,
   methods: ['GET', 'POST'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -75,9 +88,12 @@ app.use((req, res, next) => {
   });
   
   // Add CORS headers for all responses
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
   
   next();
