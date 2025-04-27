@@ -324,6 +324,10 @@ export class WebRTCManager {
     this.reconnectAttempts = 0;
     this.isConnecting = false;
   }
+
+  handleIncomingConnection(conn) {
+    this.handleConnection(conn);
+  }
 }
 
 export default new WebRTCManager(); 
