@@ -133,7 +133,13 @@ const Queue = () => {
       showNotification(`Added "${track.name}" to queue`);
     } catch (error) {
       console.error('Error adding to queue:', error);
-      showNotification('Failed to add track to queue', 'error');
+      // Show more specific error message
+      const errorMessage = error.message.includes('No available Spotify devices found') 
+        ? 'No Spotify devices found. Please open Spotify and start playing on any device.'
+        : error.message.includes('Failed to add track to queue') 
+          ? 'Failed to add track. Please ensure Spotify is open and playing.'
+          : 'Failed to add track to queue';
+      showNotification(errorMessage, 'error');
     }
   };
 
