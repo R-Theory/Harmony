@@ -111,108 +111,14 @@ export default function Session() {
     setIsHost(userIsHost);
     console.log('[Session] useEffect: userIsHost:', userIsHost, 'sessionId:', sessionId);
 
-    const initializeSession = async () => {
-      try {
-        setIsInitializing(true);
-        setError(null);
-
-        // Initialize WebRTC
-        await setupWebRTC.initialize();
-        
-        // Set up connection listeners
-        setupWebRTC.addConnectionListener((event, data) => {
-          switch (event) {
-            case 'connected':
-              console.log('[Session] setPeerId called with:', data);
-              setPeerId(data);
-              setIsConnected(true);
-              break;
-            case 'error':
-              console.error('WebRTC error:', data);
-              
-              // If it's a peer connection error, show a more specific message
-              if (data.type === 'PEER_CONNECTION') {
-                // Check if we're on a potentially restricted network
-                const isRestrictedNetwork = window.location.hostname.includes('edu') || 
-                                           window.location.hostname.includes('school') ||
-                                           /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/.test(window.location.hostname);
-                
-                if (isRestrictedNetwork) {
-                  setError(
-                    `Unable to connect to the host. This may be due to network restrictions on your school/work WiFi. ` +
-                    `Try using a different network or a mobile hotspot. If you're the host, make sure to wait a few seconds ` +
-                    `after creating the session before sharing the link.`
-                  );
-                } else {
-                  setError(
-                    `Unable to connect to the host. The host may be offline or the session ID may be incorrect. ` +
-                    `If you're the host, make sure to wait a few seconds after creating the session before sharing the link.`
-                  );
-                }
-              } else {
-                setError(data.message || 'Connection error occurred');
-              }
-              break;
-            case 'disconnected':
-              setIsConnected(false);
-              setError('Connection to the server was lost. Attempting to reconnect...');
-              break;
-          }
-        });
-
-        // Only connect if this user is a guest
-        if (!userIsHost && sessionId && sessionId !== 'new') {
-          try {
-            console.log('[Session] Guest detected. Attempting to connect to host with ID:', sessionId);
-            await setupWebRTC.connect(sessionId);
-            console.log('[Session] Successfully connected to host:', sessionId);
-          } catch (error) {
-            console.error(`Failed to connect to host: ${sessionId}`, error);
-            
-            // Check if we're on a potentially restricted network
-            const isRestrictedNetwork = window.location.hostname.includes('edu') || 
-                                       window.location.hostname.includes('school') ||
-                                       /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/.test(window.location.hostname);
-            
-            if (isRestrictedNetwork) {
-              setError(
-                `Failed to connect to the host. This may be due to network restrictions on your school/work WiFi. ` +
-                `Try using a different network or a mobile hotspot.`
-              );
-            } else {
-              setError(
-                `Failed to connect to the host. The host may be offline or the session ID may be incorrect.`
-              );
-            }
-          }
-        } else {
-          console.log('[Session] Host detected. Not connecting to any peer.');
-        }
-
-        // Set up data callback
-        setupWebRTC.setOnDataCallback((peerId, data) => {
-          if (data.type === 'guest-joined') {
-            setGuests(prev => [...prev, data.guestId]);
-          } else if (data.type === 'guest-left') {
-            setGuests(prev => prev.filter(id => id !== data.guestId));
-          }
-        });
-
-      } catch (err) {
-        console.error('Session initialization error:', err);
-        setError(err.message || 'Failed to initialize session');
-      } finally {
-        setIsInitializing(false);
-      }
-    };
-
-    initializeSession();
+    // No need to initialize or set up listeners for setupWebRTC (not a class)
+    // All WebRTC logic is handled by startWebRTCStreaming when needed
 
     // Cleanup
     return () => {
-      setupWebRTC.destroy();
       localStorage.removeItem('isHost');
-      console.log('[Session] Cleanup: webrtc destroyed and isHost removed from localStorage.');
+      console.log('[Session] Cleanup: isHost removed from localStorage.');
+      if (peerConnection) peerConnection.close();
     };
   }, [sessionId]);
   
