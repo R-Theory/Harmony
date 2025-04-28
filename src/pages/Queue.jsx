@@ -123,6 +123,19 @@ const Queue = () => {
     loadQueue();
   }, [sessionId]);
 
+  // Trigger WebRTC streaming when the next song is an Apple Music track
+  useEffect(() => {
+    if (queue.length > 0) {
+      const nextTrack = queue[0];
+      if (nextTrack.source === 'appleMusic') {
+        // For demo: call global function (replace with context/props in real app)
+        if (typeof window.startWebRTCStreaming === 'function') {
+          window.startWebRTCStreaming();
+        }
+      }
+    }
+  }, [queue]);
+
   const showNotification = (message, severity = 'success') => {
     setNotification({ open: true, message, severity });
   };

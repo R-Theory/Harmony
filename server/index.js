@@ -342,6 +342,25 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- WebRTC Signaling Events ---
+  // Guest initiates: send offer to host
+  socket.on('webrtc-offer', ({ sessionId, offer }) => {
+    console.log(`[WebRTC] Offer from ${socket.id} for session ${sessionId}`);
+    socket.to(sessionId).emit('webrtc-offer', { offer, from: socket.id });
+  });
+
+  // Host sends answer back to guest
+  socket.on('webrtc-answer', ({ sessionId, answer, to }) => {
+    console.log(`[WebRTC] Answer from host to ${to} in session ${sessionId}`);
+    io.to(to).emit('webrtc-answer', { answer });
+  });
+
+  // Both sides exchange ICE candidates
+  socket.on('webrtc-ice-candidate', ({ sessionId, candidate, to }) => {
+    console.log(`[WebRTC] ICE candidate from ${socket.id} to ${to} in session ${sessionId}`);
+    io.to(to).emit('webrtc-ice-candidate', { candidate });
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });

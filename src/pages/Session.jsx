@@ -38,7 +38,7 @@ import {
   QueueMusic as QueueMusicIcon,
 } from '@mui/icons-material';
 import { QRCodeSVG } from 'qrcode.react';
-import webrtc from '../utils/webrtc';
+import { setupWebRTC, startGuestAudioStream, playHostAudioStream } from '../../client/src/services/webrtc';
 import Queue from './Queue';
 
 // TabPanel component for the tabs
@@ -77,6 +77,7 @@ export default function Session() {
   const [showQrCode, setShowQrCode] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [tabValue, setTabValue] = useState(0);
+  const [peerConnection, setPeerConnection] = useState(null);
   
   const audioRef = React.useRef(null);
   const peerStreamRef = React.useRef(null);
@@ -116,10 +117,10 @@ export default function Session() {
         setError(null);
 
         // Initialize WebRTC
-        await webrtc.initialize();
+        await setupWebRTC.initialize();
         
         // Set up connection listeners
-        webrtc.addConnectionListener((event, data) => {
+        setupWebRTC.addConnectionListener((event, data) => {
           switch (event) {
             case 'connected':
               console.log('[Session] setPeerId called with:', data);
@@ -163,7 +164,7 @@ export default function Session() {
         if (!userIsHost && sessionId && sessionId !== 'new') {
           try {
             console.log('[Session] Guest detected. Attempting to connect to host with ID:', sessionId);
-            await webrtc.connect(sessionId);
+            await setupWebRTC.connect(sessionId);
             console.log('[Session] Successfully connected to host:', sessionId);
           } catch (error) {
             console.error(`Failed to connect to host: ${sessionId}`, error);
@@ -189,7 +190,7 @@ export default function Session() {
         }
 
         // Set up data callback
-        webrtc.setOnDataCallback((peerId, data) => {
+        setupWebRTC.setOnDataCallback((peerId, data) => {
           if (data.type === 'guest-joined') {
             setGuests(prev => [...prev, data.guestId]);
           } else if (data.type === 'guest-left') {
@@ -209,7 +210,7 @@ export default function Session() {
 
     // Cleanup
     return () => {
-      webrtc.destroy();
+      setupWebRTC.destroy();
       localStorage.removeItem('isHost');
       console.log('[Session] Cleanup: webrtc destroyed and isHost removed from localStorage.');
     };
@@ -217,8 +218,8 @@ export default function Session() {
   
   // Toggle mute
   const toggleMute = () => {
-    if (webrtc.stream) {
-      webrtc.stream.getAudioTracks().forEach(track => {
+    if (setupWebRTC.stream) {
+      setupWebRTC.stream.getAudioTracks().forEach(track => {
         track.enabled = !track.enabled;
       });
       setIsMuted(!isMuted);
@@ -234,9 +235,31 @@ export default function Session() {
   };
   
   const handleLeave = () => {
-    webrtc.destroy();
+    setupWebRTC.destroy();
     navigate('/');
   };
+  
+  // Function to start WebRTC streaming (host receives, guest sends)
+  const startWebRTCStreaming = () => {
+    if (isHost) {
+      const pc = setupWebRTC.setupWebRTC(true, sessionId, playHostAudioStream);
+      setPeerConnection(pc);
+    } else {
+      const pc = setupWebRTC.setupWebRTC(false, sessionId, null);
+      setPeerConnection(pc);
+      setupWebRTC.startGuestAudioStream(pc, sessionId);
+    }
+  };
+  
+  // Expose for demo (replace with context/props in real app)
+  window.startWebRTCStreaming = startWebRTCStreaming;
+  
+  // Clean up peer connection on unmount
+  useEffect(() => {
+    return () => {
+      if (peerConnection) peerConnection.close();
+    };
+  }, [peerConnection]);
   
   if (isInitializing) {
     return (
