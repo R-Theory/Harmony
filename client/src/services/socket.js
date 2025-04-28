@@ -1,8 +1,5 @@
 const getSocketUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  // In development, try both ports
+  // In development, use localhost:3001
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:3001';
   }
@@ -27,7 +24,7 @@ socket.on('connect_error', (error) => {
 });
 
 socket.on('connect', () => {
-  console.log('Socket connected successfully');
+  console.log('Socket connected successfully to:', getSocketUrl());
 });
 
 socket.on('disconnect', (reason) => {
