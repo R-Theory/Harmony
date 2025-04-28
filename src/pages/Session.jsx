@@ -78,6 +78,7 @@ export default function Session() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [tabValue, setTabValue] = useState(0);
   const [peerConnection, setPeerConnection] = useState(null);
+  const [isStreaming, setIsStreaming] = useState(false);
   
   const audioRef = React.useRef(null);
   const peerStreamRef = React.useRef(null);
@@ -149,13 +150,19 @@ export default function Session() {
   
   // Function to start WebRTC streaming (host receives, guest sends)
   const startWebRTCStreaming = () => {
+    setIsStreaming(true);
+    console.log('[WebRTC] Streaming started. isHost:', isHost);
     if (isHost) {
-      const pc = setupWebRTC.setupWebRTC(true, sessionId, playHostAudioStream);
+      const pc = setupWebRTC(true, sessionId, (stream) => {
+        playHostAudioStream(stream);
+        console.log('[WebRTC] Host received audio stream');
+      });
       setPeerConnection(pc);
     } else {
-      const pc = setupWebRTC.setupWebRTC(false, sessionId, null);
+      const pc = setupWebRTC(false, sessionId, null);
       setPeerConnection(pc);
-      setupWebRTC.startGuestAudioStream(pc, sessionId);
+      startGuestAudioStream(pc, sessionId);
+      console.log('[WebRTC] Guest started streaming audio to host');
     }
   };
   
@@ -165,7 +172,11 @@ export default function Session() {
   // Clean up peer connection on unmount
   useEffect(() => {
     return () => {
-      if (peerConnection) peerConnection.close();
+      if (peerConnection) {
+        peerConnection.close();
+        setIsStreaming(false);
+        console.log('[WebRTC] Streaming stopped (peerConnection closed)');
+      }
     };
   }, [peerConnection]);
   
@@ -252,6 +263,14 @@ export default function Session() {
 
   return (
     <Box p={3}>
+      {/* Streaming UI Banner */}
+      {isStreaming && (
+        <Box sx={{ p: 2, mb: 2, background: '#e3f2fd', color: '#1976d2', borderRadius: 2, textAlign: 'center' }}>
+          <Typography variant="h6">
+            {isHost ? 'Receiving audio stream from guest...' : 'Streaming audio to host...'}
+          </Typography>
+        </Box>
+      )}
       <Paper elevation={3} sx={{ p: 3 }}>
         <Grid container spacing={3}>
           <Grid item xs={12}>
