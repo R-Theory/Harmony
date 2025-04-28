@@ -1,5 +1,6 @@
 import express from 'express';
 import SpotifyWebApi from 'spotify-web-api-node';
+import fetch from 'node-fetch';
 
 const router = express.Router();
 
@@ -20,11 +21,21 @@ router.get('/queue', async (req, res) => {
 
   try {
     spotifyApi.setAccessToken(access_token);
-    const data = await spotifyApi.getMyCurrentPlaybackState();
-    
+    // Use node-fetch to get the queue
+    const response = await fetch('https://api.spotify.com/v1/me/player/queue', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Spotify queue fetch failed: ${response.status}`);
+    }
+    const queueData = await response.json();
     res.json({
-      queue: data.body.queue || [],
-      currently_playing: data.body.item || null
+      queue: queueData.queue || [],
+      currently_playing: queueData.currently_playing || null
     });
   } catch (error) {
     console.error('Error getting queue:', error);
