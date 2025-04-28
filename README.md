@@ -54,7 +54,3 @@ npm run dev
 - Backend: Express.js (serverless on Vercel)
 - Real-time communication: WebRTC with PeerJS (using public PeerJS server)
 - Music integration: Spotify Web API
-
-## License
-
-MIT 
