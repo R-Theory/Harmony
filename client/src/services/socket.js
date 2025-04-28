@@ -3,8 +3,8 @@ const getSocketUrl = () => {
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:3001';
   }
-  // In production, use the current host
-  return window.location.origin;
+  // Use Render backend in production
+  return 'https://harmony-backend-nxqv.onrender.com';
 };
 
 const socket = io(getSocketUrl(), {
