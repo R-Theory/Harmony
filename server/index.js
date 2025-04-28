@@ -175,7 +175,7 @@ async function getSpotifyQueue(accessToken) {
     }
     
     // Now get the queue
-    const queueData = await spotifyApi.getMyCurrentQueue();
+    const queueData = await spotifyApi.getMyQueue();
     console.log('Spotify queue data:', {
       hasQueue: !!queueData.body.queue,
       queueLength: queueData.body.queue ? queueData.body.queue.length : 0,
