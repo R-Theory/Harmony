@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types';
 import { useState } from 'react';
 import {
   Paper,
@@ -15,26 +16,16 @@ import {
   VolumeUp,
 } from '@mui/icons-material';
 
-const PlayerBar = () => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(100);
+const PlayerBar = ({
+  currentTrack,
+  isPlaying,
+  onPlayPause,
+  onSkipNext,
+  onSkipPrevious,
+  volume,
+  onVolumeChange
+}) => {
   const theme = useTheme();
-
-  // Placeholder for now - will be connected to actual player state later
-  const currentTrack = {
-    title: 'No track playing',
-    artist: '',
-    duration: 0,
-    currentTime: 0,
-  };
-
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleVolumeChange = (event, newValue) => {
-    setVolume(newValue);
-  };
 
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
@@ -59,22 +50,22 @@ const PlayerBar = () => {
         {/* Track Info */}
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Typography variant="subtitle1" noWrap>
-            {currentTrack.title}
+            {currentTrack?.title || 'No track playing'}
           </Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
-            {currentTrack.artist}
+            {currentTrack?.artist || ''}
           </Typography>
         </Box>
 
         {/* Playback Controls */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton size="small">
+          <IconButton size="small" onClick={onSkipPrevious}>
             <SkipPrevious />
           </IconButton>
-          <IconButton onClick={handlePlayPause}>
+          <IconButton onClick={onPlayPause}>
             {isPlaying ? <Pause /> : <PlayArrow />}
           </IconButton>
-          <IconButton size="small">
+          <IconButton size="small" onClick={onSkipNext}>
             <SkipNext />
           </IconButton>
         </Box>
@@ -83,8 +74,8 @@ const PlayerBar = () => {
         <Box sx={{ flexGrow: 2, mx: 2, display: { xs: 'none', sm: 'block' } }}>
           <Slider
             size="small"
-            value={currentTrack.currentTime}
-            max={currentTrack.duration}
+            value={currentTrack?.currentTime || 0}
+            max={currentTrack?.duration || 0}
             sx={{
               color: theme.palette.primary.main,
               '& .MuiSlider-thumb': {
@@ -92,13 +83,14 @@ const PlayerBar = () => {
                 height: 8,
               },
             }}
+            disabled={!currentTrack}
           />
           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
             <Typography variant="caption" color="text.secondary">
-              {formatTime(currentTrack.currentTime)}
+              {formatTime(currentTrack?.currentTime || 0)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {formatTime(currentTrack.duration)}
+              {formatTime(currentTrack?.duration || 0)}
             </Typography>
           </Box>
         </Box>
@@ -109,7 +101,7 @@ const PlayerBar = () => {
           <Slider
             size="small"
             value={volume}
-            onChange={handleVolumeChange}
+            onChange={onVolumeChange}
             sx={{
               color: theme.palette.primary.main,
               '& .MuiSlider-thumb': {
@@ -122,6 +114,21 @@ const PlayerBar = () => {
       </Box>
     </Paper>
   );
+};
+
+PlayerBar.propTypes = {
+  currentTrack: PropTypes.shape({
+    title: PropTypes.string,
+    artist: PropTypes.string,
+    duration: PropTypes.number,
+    currentTime: PropTypes.number,
+  }),
+  isPlaying: PropTypes.bool.isRequired,
+  onPlayPause: PropTypes.func.isRequired,
+  onSkipNext: PropTypes.func.isRequired,
+  onSkipPrevious: PropTypes.func.isRequired,
+  volume: PropTypes.number.isRequired,
+  onVolumeChange: PropTypes.func.isRequired,
 };
 
 export default PlayerBar; 

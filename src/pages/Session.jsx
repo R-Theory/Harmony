@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Box,
@@ -22,6 +22,8 @@ import {
   Tabs,
   Tab,
   CircularProgress,
+  ListItemAvatar,
+  Avatar,
 } from '@mui/material';
 import {
   Mic as MicIcon,
@@ -40,6 +42,10 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { setupWebRTC, startGuestAudioStream, playHostAudioStream } from '../../client/src/services/webrtc';
 import Queue from './Queue';
+import PlayerBar from '../components/PlayerBar';
+import { queueService } from '../utils/queueService';
+import { v4 as uuidv4 } from 'uuid';
+import socket from '../../client/src/services/socket';
 
 // TabPanel component for the tabs
 function TabPanel(props) {
@@ -70,7 +76,7 @@ export default function Session() {
   const [isConnected, setIsConnected] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(100);
   const [error, setError] = useState(null);
   const [guests, setGuests] = useState([]);
   const [peerId, setPeerId] = useState(null);
@@ -79,14 +85,33 @@ export default function Session() {
   const [tabValue, setTabValue] = useState(0);
   const [peerConnection, setPeerConnection] = useState(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [queue, setQueue] = useState([]);
+  const [selectedPlaybackDevice, setSelectedPlaybackDevice] = useState(null);
+  const [showDeviceMenu, setShowDeviceMenu] = useState(false);
   
   const audioRef = React.useRef(null);
   const peerStreamRef = React.useRef(null);
   
+  // Generate or get a userId for this device
+  const [userId] = useState(() => {
+    let id = localStorage.getItem('user_id');
+    if (!id) {
+      id = uuidv4();
+      localStorage.setItem('user_id', id);
+    }
+    return id;
+  });
+  // Detect capabilities
+  const hasSpotify = localStorage.getItem('spotify_connected') === 'true';
+  // TODO: Add real Apple Music detection if available
+  const hasAppleMusic = false;
+  
   // Get the current URL for the QR code
   const getSessionUrl = () => {
     const baseUrl = window.location.origin;
-    return peerId ? `${baseUrl}/session/${peerId}` : '';
+    return `${baseUrl}/session/${sessionId}`;
   };
   
   // Handle tab change
@@ -138,9 +163,7 @@ export default function Session() {
   // Handle volume change
   const handleVolumeChange = (event, newValue) => {
     setVolume(newValue);
-    if (audioRef.current) {
-      audioRef.current.volume = newValue;
-    }
+    console.log('[PlayerBar] Volume changed:', newValue);
   };
   
   const handleLeave = () => {
@@ -148,10 +171,27 @@ export default function Session() {
     navigate('/');
   };
   
-  // Function to start WebRTC streaming (host receives, guest sends)
-  const startWebRTCStreaming = () => {
+  // Improved WebRTC streaming logic
+  useEffect(() => {
+    if (!queueService.socket) return;
+    // Listen for a request to start streaming to a device
+    queueService.socket.on('start-stream-to', ({ fromUserId, toUserId }) => {
+      if (fromUserId === userId) {
+        console.log('[WebRTC] Received request to start streaming to', toUserId);
+        startWebRTCStreaming(toUserId);
+      }
+    });
+    return () => {
+      if (queueService.socket) {
+        queueService.socket.off('start-stream-to');
+      }
+    };
+  }, [queueService.socket, userId]);
+
+  // Update startWebRTCStreaming to accept a targetUserId
+  const startWebRTCStreaming = (targetUserId) => {
     setIsStreaming(true);
-    console.log('[WebRTC] Streaming started. isHost:', isHost);
+    console.log('[WebRTC] Streaming started. isHost:', isHost, 'targetUserId:', targetUserId);
     if (isHost) {
       const pc = setupWebRTC(true, sessionId, (stream) => {
         playHostAudioStream(stream);
@@ -164,9 +204,11 @@ export default function Session() {
       startGuestAudioStream(pc, sessionId);
       console.log('[WebRTC] Guest started streaming audio to host');
     }
+    // Optionally, emit a debug event
+    if (targetUserId) {
+      console.log('[WebRTC] Would stream audio to user:', targetUserId);
+    }
   };
-  
-  // Expose for demo (replace with context/props in real app)
   window.startWebRTCStreaming = startWebRTCStreaming;
   
   // Clean up peer connection on unmount
@@ -180,6 +222,211 @@ export default function Session() {
     };
   }, [peerConnection]);
   
+  useEffect(() => {
+    if (!sessionId) return;
+    // Set up queueService callbacks
+    queueService.setCallbacks(
+      (updatedQueue) => {
+        setQueue(updatedQueue || []);
+        setCurrentTrack((updatedQueue && updatedQueue.length > 0) ? updatedQueue[0] : null);
+      },
+      (errorMessage) => {
+        setError({ message: errorMessage });
+      }
+    );
+    queueService.connect(sessionId);
+    // Initial fetch
+    queueService.getQueue();
+    // Emit device capabilities to backend
+    if (queueService.socket) {
+      queueService.socket.emit('device-capabilities', {
+        sessionId,
+        userId,
+        hasSpotify,
+        hasAppleMusic
+      });
+    } else {
+      // Wait for socket to connect, then emit
+      const interval = setInterval(() => {
+        if (queueService.socket && queueService.isConnected) {
+          queueService.socket.emit('device-capabilities', {
+            sessionId,
+            userId,
+            hasSpotify,
+            hasAppleMusic
+          });
+          clearInterval(interval);
+        }
+      }, 500);
+    }
+    // Listen for updated device list from backend
+    if (queueService.socket) {
+      queueService.socket.on('device-list', (deviceList) => {
+        setGuests(deviceList.filter(d => d.userId !== userId));
+      });
+    }
+    // Clean up on unmount
+    return () => {
+      queueService.disconnect();
+    };
+  }, [sessionId, userId, hasSpotify, hasAppleMusic]);
+
+  // Playback control handlers
+  const handlePlayPause = () => {
+    setIsPlaying((prev) => !prev);
+    console.log('[PlayerBar] Play/Pause toggled:', !isPlaying);
+  };
+  const handleSkipNext = () => {
+    // For now, just log and set next track as current
+    if (queue && queue.length > 1) {
+      // Remove the first track and update currentTrack
+      const newQueue = queue.slice(1);
+      setQueue(newQueue);
+      setCurrentTrack(newQueue[0] || null);
+      setIsPlaying(true);
+      // Optionally, emit skip event to backend here
+    }
+    console.log('[PlayerBar] Skip to next track');
+  };
+  const handleSkipPrevious = () => {
+    // For now, just log (implement real logic if you keep track history)
+    console.log('[PlayerBar] Skip to previous track');
+  };
+
+  // Helper to get all devices (host + guests)
+  const getAllDevices = () => {
+    const devices = [];
+    devices.push({ id: userId, name: 'This Device (You)', isHost: isHost, hasSpotify, hasAppleMusic });
+    guests.forEach((guest, idx) => {
+      devices.push({
+        id: guest.userId,
+        name: `Guest ${idx + 1} (${guest.userId})`,
+        isHost: guest.isHost,
+        hasSpotify: guest.hasSpotify,
+        hasAppleMusic: guest.hasAppleMusic
+      });
+    });
+    return devices;
+  };
+
+  let spotifyPlayer = null;
+  const spotifyPlayerRef = useRef(null);
+  const [spotifyReady, setSpotifyReady] = useState(false);
+
+  // Spotify Web Playback SDK loader
+  useEffect(() => {
+    if (!window.Spotify) {
+      const script = document.createElement('script');
+      script.src = 'https://sdk.scdn.co/spotify-player.js';
+      script.async = true;
+      document.body.appendChild(script);
+      script.onload = () => {
+        console.log('[Spotify SDK] Script loaded');
+      };
+    }
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      setSpotifyReady(true);
+      console.log('[Spotify SDK] Ready');
+    };
+  }, []);
+
+  // Initialize Spotify Player when ready
+  useEffect(() => {
+    if (spotifyReady && !spotifyPlayerRef.current) {
+      const token = localStorage.getItem('spotify_access_token');
+      if (!token) return;
+      spotifyPlayer = new window.Spotify.Player({
+        name: 'Harmony Web Player',
+        getOAuthToken: cb => { cb(token); },
+        volume: 0.8
+      });
+      spotifyPlayer.addListener('ready', ({ device_id }) => {
+        console.log('[Spotify SDK] Player ready with device_id', device_id);
+        spotifyPlayerRef.current = spotifyPlayer;
+      });
+      spotifyPlayer.addListener('not_ready', ({ device_id }) => {
+        console.log('[Spotify SDK] Player not ready', device_id);
+      });
+      spotifyPlayer.addListener('initialization_error', e => console.error('[Spotify SDK] Init error', e));
+      spotifyPlayer.addListener('authentication_error', e => console.error('[Spotify SDK] Auth error', e));
+      spotifyPlayer.addListener('account_error', e => console.error('[Spotify SDK] Account error', e));
+      spotifyPlayer.addListener('playback_error', e => console.error('[Spotify SDK] Playback error', e));
+      spotifyPlayer.connect();
+    }
+  }, [spotifyReady]);
+
+  // In playback/streaming effect, request a capable device to stream if needed
+  useEffect(() => {
+    if (!currentTrack || !selectedPlaybackDevice) return;
+    const canPlay =
+      (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) ||
+      (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic);
+    if (canPlay) {
+      if (selectedPlaybackDevice.id === userId) {
+        if (currentTrack.source === 'spotify') {
+          // Play Spotify track using SDK
+          const token = localStorage.getItem('spotify_access_token');
+          if (window.Spotify && spotifyPlayerRef.current && token) {
+            // Transfer playback to web player
+            fetch('https://api.spotify.com/v1/me/player', {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ device_ids: [spotifyPlayerRef.current._options.id], play: true })
+            }).then(() => {
+              // Play the track
+              fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyPlayerRef.current._options.id}`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ uris: [currentTrack.uri] })
+              }).then(() => {
+                console.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
+              }).catch(e => console.error('[Playback] Error playing track:', e));
+            }).catch(e => console.error('[Playback] Error transferring playback:', e));
+          } else {
+            console.warn('[Playback] Spotify SDK not ready or no token');
+          }
+        } else if (currentTrack.source === 'appleMusic') {
+          // TODO: Integrate Apple Music JS SDK playback here
+          console.log('[Playback] Would play Apple Music track:', currentTrack);
+        }
+      } else {
+        console.log('[Playback] Another device will play the track:', selectedPlaybackDevice);
+      }
+    } else {
+      // Find a capable device
+      const allDevices = getAllDevices();
+      const capableDevice = allDevices.find(d =>
+        (currentTrack.source === 'spotify' && d.hasSpotify) ||
+        (currentTrack.source === 'appleMusic' && d.hasAppleMusic)
+      );
+      if (capableDevice) {
+        if (capableDevice.id === userId) {
+          // This device should stream audio to the selected device
+          console.log('[Streaming] This device will stream audio to', selectedPlaybackDevice);
+          startWebRTCStreaming(selectedPlaybackDevice.id);
+        } else {
+          // Request the capable device to start streaming
+          if (queueService.socket) {
+            queueService.socket.emit('request-stream', {
+              sessionId,
+              fromUserId: capableDevice.id,
+              toUserId: selectedPlaybackDevice.id
+            });
+            console.log('[WebRTC] Requested device', capableDevice.id, 'to stream to', selectedPlaybackDevice.id);
+          }
+        }
+      } else {
+        console.warn('[Playback] No device in session can play this track:', currentTrack);
+      }
+    }
+  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady]);
+
   if (isInitializing) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -263,6 +510,56 @@ export default function Session() {
 
   return (
     <Box p={3}>
+      {/* Device Selection Button */}
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Button
+          variant="outlined"
+          onClick={() => setShowDeviceMenu(true)}
+          startIcon={<ComputerIcon />}
+        >
+          Select Playback Device
+        </Button>
+        {selectedPlaybackDevice && (
+          <Typography variant="body2" color="text.secondary">
+            Playing on: {selectedPlaybackDevice.name}
+          </Typography>
+        )}
+      </Box>
+      {/* Device Selection Dialog */}
+      <Dialog open={showDeviceMenu} onClose={() => setShowDeviceMenu(false)}>
+        <DialogTitle>Select Playback Device</DialogTitle>
+        <DialogContent>
+          <List>
+            {getAllDevices().map((device) => (
+              <ListItem
+                button
+                key={device.id}
+                selected={selectedPlaybackDevice?.id === device.id}
+                onClick={() => {
+                  setSelectedPlaybackDevice(device);
+                  setShowDeviceMenu(false);
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar>
+                    <ComputerIcon />
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={device.name}
+                  secondary={
+                    [
+                      device.isHost ? 'Host' : 'Guest',
+                      device.hasSpotify ? 'Spotify' : null,
+                      device.hasAppleMusic ? 'Apple Music' : null
+                    ].filter(Boolean).join(' • ')
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+      </Dialog>
       {/* Streaming UI Banner */}
       {isStreaming && (
         <Box sx={{ p: 2, mb: 2, background: '#e3f2fd', color: '#1976d2', borderRadius: 2, textAlign: 'center' }}>
@@ -281,21 +578,16 @@ export default function Session() {
 
           <Grid item xs={12}>
             <Typography>
-              Your ID: {peerId}
+              Session ID: <b>{sessionId}</b>
             </Typography>
-            {isHost && peerId && (
-              <Typography>
-                Share this ID with guests to join: {peerId}
-                <IconButton onClick={() => setShowQrCode(true)}>
-                  <QrCodeIcon />
-                </IconButton>
-              </Typography>
-            )}
-            {!peerId && isHost && (
-              <Typography color="text.secondary">
-                Waiting for PeerJS connection...
-              </Typography>
-            )}
+            <Button
+              variant="outlined"
+              startIcon={<QrCodeIcon />}
+              sx={{ mt: 1, mb: 1 }}
+              onClick={() => setShowQrCode(true)}
+            >
+              Show QR Code
+            </Button>
             {!isHost && (
               <Typography>
                 Connected to host: {sessionId}
@@ -314,8 +606,8 @@ export default function Session() {
                   value={volume}
                   onChange={handleVolumeChange}
                   min={0}
-                  max={1}
-                  step={0.1}
+                  max={100}
+                  step={1}
                 />
               </Box>
               <Button
@@ -404,35 +696,37 @@ export default function Session() {
             <Typography variant="body1" align="center" color="text.secondary">
               Scan this QR code with your mobile device to join the session
             </Typography>
-            {peerId ? (
-              <Box 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'white', 
-                  borderRadius: 1,
-                  boxShadow: 1
-                }}
-              >
-                <QRCodeSVG 
-                  value={getSessionUrl()} 
-                  size={256}
-                  level="H"
-                  includeMargin={true}
-                />
-              </Box>
-            ) : (
-              <Typography color="text.secondary">
-                Waiting for PeerJS connection...
-              </Typography>
-            )}
-            {peerId && (
-              <Typography variant="body2" align="center" color="text.secondary">
-                Or share this link: {getSessionUrl()}
-              </Typography>
-            )}
+            <Box 
+              sx={{ 
+                p: 2, 
+                bgcolor: 'white', 
+                borderRadius: 1,
+                boxShadow: 1
+              }}
+            >
+              <QRCodeSVG 
+                value={getSessionUrl()} 
+                size={256}
+                level="H"
+                includeMargin={true}
+              />
+            </Box>
+            <Typography variant="body2" align="center" color="text.secondary">
+              Or share this link: {getSessionUrl()}
+            </Typography>
           </Box>
         </DialogContent>
       </Dialog>
+      {/* PlayerBar at the bottom */}
+      <PlayerBar
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPause}
+        onSkipNext={handleSkipNext}
+        onSkipPrevious={handleSkipPrevious}
+        volume={volume}
+        onVolumeChange={handleVolumeChange}
+      />
     </Box>
   );
 } 

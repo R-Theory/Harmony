@@ -126,88 +126,64 @@ class QueueService {
     this.onError = onError;
   }
 
-  async addToQueue(track, accessToken) {
+  async addToQueue(track) {
     if (!this.socket || !this.sessionId) {
       throw new Error('Not connected to a session');
     }
-
     if (!this.isConnected) {
       throw new Error('Socket connection is not active');
     }
-
-    console.log('Adding track to queue:', {
+    console.log('App-managed: Adding track to queue:', {
       trackName: track.name,
       trackUri: track.uri,
       sessionId: this.sessionId
     });
-
     try {
-      // First add to Spotify queue
-      await spotifyAddToQueue(track.uri, accessToken);
-      console.log('Successfully added track to Spotify queue');
-      
-      // Then notify other users through Socket.IO
+      // Only emit to backend (app-managed queue)
       this.socket.emit('add-to-queue', {
         sessionId: this.sessionId,
-        track,
-        accessToken
+        track
       });
-      console.log('Emitted add-to-queue event to server');
+      console.log('App-managed: Emitted add-to-queue event to server');
     } catch (error) {
-      console.error('Error adding to queue:', error);
+      console.error('App-managed: Error adding to queue:', error);
       throw error;
     }
   }
 
-  async removeFromQueue(track, accessToken) {
+  async removeFromQueue(track) {
     if (!this.socket || !this.sessionId) {
       throw new Error('Not connected to a session');
     }
-
     if (!this.isConnected) {
       throw new Error('Socket connection is not active');
     }
-
-    console.log('Removing track from queue:', {
+    console.log('App-managed: Removing track from queue:', {
       trackName: track.name,
       trackUri: track.uri,
       sessionId: this.sessionId
     });
-
     try {
-      // Since Spotify doesn't support direct queue removal,
-      // we'll handle it through our Socket.IO implementation
+      // Only emit to backend (app-managed queue)
       this.socket.emit('remove-from-queue', {
         sessionId: this.sessionId,
-        trackUri: track.uri,
-        accessToken
+        trackUri: track.uri
       });
-      console.log('Emitted remove-from-queue event to server');
-
-      // Skip to next track as a workaround
-      await skipToNext(accessToken);
-      console.log('Successfully skipped to next track in Spotify');
+      console.log('App-managed: Emitted remove-from-queue event to server');
     } catch (error) {
-      console.error('Error removing from queue:', error);
+      console.error('App-managed: Error removing from queue:', error);
       throw error;
     }
   }
 
-  getQueue(accessToken) {
+  getQueue() {
     if (!this.socket || !this.sessionId) {
       throw new Error('Not connected to a session');
     }
-
-    if (!this.isConnected) {
-      throw new Error('Socket connection is not active');
-    }
-
-    console.log('Getting queue for session:', this.sessionId);
+    // No accessToken needed for app-managed queue
     this.socket.emit('get-queue', {
-      sessionId: this.sessionId,
-      accessToken
+      sessionId: this.sessionId
     });
-    console.log('Emitted get-queue event to server');
   }
 }
 

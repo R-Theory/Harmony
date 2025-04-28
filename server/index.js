@@ -232,113 +232,55 @@ io.on('connection', (socket) => {
     console.log(`Client ${socket.id} left session ${sessionId}`);
   });
 
-  // Add track to queue
-  socket.on('add-to-queue', async ({ sessionId, track, accessToken }) => {
-    console.log(`Adding track to queue for session ${sessionId}:`, {
+  // Add track to queue (app-managed queue)
+  socket.on('add-to-queue', async ({ sessionId, track }) => {
+    console.log(`App-managed: Adding track to queue for session ${sessionId}:`, {
       trackName: track.name,
       trackUri: track.uri,
-      hasAccessToken: !!accessToken
     });
-    
     try {
-      // Add to Spotify queue
-      spotifyApi.setAccessToken(accessToken);
-      await spotifyApi.addToQueue(track.uri);
-      console.log(`Successfully added track ${track.name} to Spotify queue`);
-      
-      // Wait a moment for Spotify to update
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Get updated queue from Spotify
-      const spotifyQueue = await getSpotifyQueue(accessToken);
-      console.log(`Retrieved updated Spotify queue:`, {
-        queueLength: spotifyQueue.length
-      });
-      
-      // Update session queue with Spotify's queue
-      sessionQueues.set(sessionId, spotifyQueue);
-      
+      // Add to app-managed queue
+      if (!sessionQueues.has(sessionId)) sessionQueues.set(sessionId, []);
+      const queue = sessionQueues.get(sessionId);
+      queue.push(track);
+      sessionQueues.set(sessionId, queue);
+      console.log(`App-managed: Track added. Queue now has ${queue.length} tracks.`);
       // Broadcast queue update to all clients in the session
-      console.log(`Broadcasting queue update to session ${sessionId}:`, {
-        queueLength: spotifyQueue.length
-      });
-      io.to(sessionId).emit('queue-update', { queue: spotifyQueue });
-      
-      console.log(`Added track ${track.name} to queue for session ${sessionId}`);
+      io.to(sessionId).emit('queue-update', { queue });
     } catch (error) {
-      console.error('Error adding to queue:', error);
-      socket.emit('queue-error', { 
-        message: error.message || 'Failed to add track to queue. Please ensure Spotify is open and playing.'
-      });
+      console.error('App-managed: Error adding to queue:', error);
+      socket.emit('queue-error', { message: error.message || 'Failed to add track to queue.' });
     }
   });
 
-  // Remove track from queue
-  socket.on('remove-from-queue', async ({ sessionId, trackUri, accessToken }) => {
-    console.log(`Removing track from queue for session ${sessionId}:`, {
-      trackUri,
-      hasAccessToken: !!accessToken
-    });
-    
+  // Remove track from queue (app-managed queue)
+  socket.on('remove-from-queue', async ({ sessionId, trackUri }) => {
+    console.log(`App-managed: Removing track from queue for session ${sessionId}:`, { trackUri });
     try {
-      // Skip to next track in Spotify (workaround since direct queue removal isn't supported)
-      spotifyApi.setAccessToken(accessToken);
-      await spotifyApi.skipToNext();
-      console.log(`Successfully skipped to next track in Spotify`);
-      
-      // Wait a moment for Spotify to update
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Get updated queue from Spotify
-      const spotifyQueue = await getSpotifyQueue(accessToken);
-      console.log(`Retrieved updated Spotify queue after removal:`, {
-        queueLength: spotifyQueue.length
-      });
-      
-      // Update session queue with Spotify's queue
-      sessionQueues.set(sessionId, spotifyQueue);
-      
+      if (!sessionQueues.has(sessionId)) sessionQueues.set(sessionId, []);
+      let queue = sessionQueues.get(sessionId);
+      const originalLength = queue.length;
+      queue = queue.filter(track => track.uri !== trackUri);
+      sessionQueues.set(sessionId, queue);
+      console.log(`App-managed: Track removed. Queue now has ${queue.length} tracks (was ${originalLength}).`);
       // Broadcast queue update to all clients in the session
-      console.log(`Broadcasting queue update to session ${sessionId}:`, {
-        queueLength: spotifyQueue.length
-      });
-      io.to(sessionId).emit('queue-update', { queue: spotifyQueue });
-      
-      console.log(`Removed track ${trackUri} from queue for session ${sessionId}`);
+      io.to(sessionId).emit('queue-update', { queue });
     } catch (error) {
-      console.error('Error removing from queue:', error);
-      socket.emit('queue-error', { 
-        message: error.message || 'Failed to remove track from queue'
-      });
+      console.error('App-managed: Error removing from queue:', error);
+      socket.emit('queue-error', { message: error.message || 'Failed to remove track from queue.' });
     }
   });
 
-  // Get current queue
-  socket.on('get-queue', async ({ sessionId, accessToken }) => {
-    console.log(`Getting queue for session ${sessionId}:`, {
-      hasAccessToken: !!accessToken
-    });
-    
+  // Get current queue (app-managed queue)
+  socket.on('get-queue', async ({ sessionId }) => {
+    console.log(`App-managed: Getting queue for session ${sessionId}`);
     try {
-      // Get Spotify queue
-      const spotifyQueue = await getSpotifyQueue(accessToken);
-      console.log(`Retrieved Spotify queue:`, {
-        queueLength: spotifyQueue.length
-      });
-      
-      // Update session queue
-      sessionQueues.set(sessionId, spotifyQueue);
-      
-      // Send queue to the client
-      console.log(`Sending queue to client ${socket.id}:`, {
-        queueLength: spotifyQueue.length
-      });
-      socket.emit('queue-update', { queue: spotifyQueue });
+      if (!sessionQueues.has(sessionId)) sessionQueues.set(sessionId, []);
+      const queue = sessionQueues.get(sessionId);
+      socket.emit('queue-update', { queue });
     } catch (error) {
-      console.error('Error getting queue:', error);
-      socket.emit('queue-error', { 
-        message: error.message || 'Failed to get queue'
-      });
+      console.error('App-managed: Error getting queue:', error);
+      socket.emit('queue-error', { message: error.message || 'Failed to get queue.' });
     }
   });
 
