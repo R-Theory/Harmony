@@ -1,3 +1,5 @@
+import { io } from 'socket.io-client';
+
 const getSocketUrl = () => {
   // In development, use localhost:3001
   if (process.env.NODE_ENV === 'development') {
