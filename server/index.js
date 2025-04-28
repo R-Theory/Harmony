@@ -441,12 +441,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', details: err.message });
 });
 
-// Only start the server if we're not in a serverless environment
-if (process.env.NODE_ENV !== 'production') {
-  const port = process.env.PORT || 3001;
-  httpServer.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
-  });
-}
+// Start the server
+const port = process.env.PORT || 3001; // Use Render's port or default
+httpServer.listen(port, '0.0.0.0', () => { // Listen on all interfaces
+  console.log(`Server running on port ${port}`);
+});
 
 export default app; 
