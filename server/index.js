@@ -137,6 +137,11 @@ const spotifyApi = new SpotifyWebApi({
   redirectUri: process.env.SPOTIFY_REDIRECT_URI
 });
 
+// Debugging: Log version and check for .request method
+const tempSpotifyApi = new SpotifyWebApi();
+console.log('Spotify Web API Node version:', SpotifyWebApi.version || (SpotifyWebApi.prototype.request ? '5.x or later' : 'Unknown/Old'));
+console.log('Does spotifyApi.request exist?', typeof tempSpotifyApi.request);
+
 // WebRTC signaling
 const sessions = new Map();
 
