@@ -29,4 +29,7 @@ socket.on('connect', () => {
 
 socket.on('disconnect', (reason) => {
   console.log('Socket disconnected:', reason);
-}); 
+});
+
+export { socket };
+export default socket; 
