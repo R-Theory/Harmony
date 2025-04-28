@@ -4,6 +4,7 @@ import cors from 'cors';
 import SpotifyWebApi from 'spotify-web-api-node';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import fetch from 'node-fetch';
 
 // Import queue API routes
 import queueRoutes from './api/queue.js';
@@ -179,8 +180,18 @@ async function getSpotifyQueue(accessToken) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    // Now get the queue
-    const queueData = await spotifyApi.request('GET', '/me/player/queue');
+    // Use node-fetch to get the queue
+    const response = await fetch('https://api.spotify.com/v1/me/player/queue', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Spotify queue fetch failed: ${response.status}`);
+    }
+    const queueData = await response.json();
     console.log('Spotify queue data:', {
       hasQueue: !!queueData.queue,
       queueLength: queueData.queue ? queueData.queue.length : 0,
