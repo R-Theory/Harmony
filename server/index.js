@@ -175,13 +175,13 @@ async function getSpotifyQueue(accessToken) {
     }
     
     // Now get the queue
-    const queueData = await spotifyApi.getMyQueue();
+    const queueData = await spotifyApi.request('GET', '/me/player/queue');
     console.log('Spotify queue data:', {
-      hasQueue: !!queueData.body.queue,
-      queueLength: queueData.body.queue ? queueData.body.queue.length : 0,
-      currentlyPlaying: queueData.body.currently_playing ? queueData.body.currently_playing.name : 'None'
+      hasQueue: !!queueData.queue,
+      queueLength: queueData.queue ? queueData.queue.length : 0,
+      currentlyPlaying: queueData.currently_playing ? queueData.currently_playing.name : 'None'
     });
-    return queueData.body.queue || [];
+    return queueData.queue || [];
   } catch (error) {
     console.error('Error getting Spotify queue:', error);
     return [];
