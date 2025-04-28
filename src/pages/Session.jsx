@@ -114,6 +114,8 @@ export default function Session() {
     // No need to initialize or set up listeners for setupWebRTC (not a class)
     // All WebRTC logic is handled by startWebRTCStreaming when needed
 
+    setIsInitializing(false);
+
     // Cleanup
     return () => {
       localStorage.removeItem('isHost');
