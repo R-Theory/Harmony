@@ -68,6 +68,8 @@ function TabPanel(props) {
   );
 }
 
+const APPLE_MUSIC_DEVELOPER_TOKEN = 'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlJXMjJVRDIyQTkifQ.eyJpYXQiOjE3NDU5NjE4NTksImV4cCI6MTc2MTUxMzg1OSwiaXNzIjoiTkxOQVROVDdWVSJ9.mOy9btGm3dGFpi-WRg82rrCAc1XTW-v-IPatLx0Tu_uL93ZSHrcRsB5bn7Y2mxTrZqsOGJn2p52f4AEHAah_Fg'; // <-- Paste your token here
+
 export default function Session() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -90,6 +92,8 @@ export default function Session() {
   const [queue, setQueue] = useState([]);
   const [selectedPlaybackDevice, setSelectedPlaybackDevice] = useState(null);
   const [showDeviceMenu, setShowDeviceMenu] = useState(false);
+  const [appleMusicReady, setAppleMusicReady] = useState(false);
+  const [appleMusicUserToken, setAppleMusicUserToken] = useState(null);
   
   const audioRef = React.useRef(null);
   const peerStreamRef = React.useRef(null);
@@ -355,7 +359,43 @@ export default function Session() {
     }
   }, [spotifyReady]);
 
-  // In playback/streaming effect, request a capable device to stream if needed
+  // Load and initialize MusicKit JS
+  useEffect(() => {
+    if (!window.MusicKit) {
+      const script = document.createElement('script');
+      script.src = 'https://js-cdn.music.apple.com/musickit/v1/musickit.js';
+      script.async = true;
+      document.body.appendChild(script);
+      script.onload = () => {
+        window.MusicKit.configure({
+          developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
+          app: {
+            name: 'Harmony',
+            build: '1.0.0'
+          }
+        });
+        setAppleMusicReady(true);
+        console.log('[MusicKit] Script loaded and configured');
+      };
+    } else {
+      setAppleMusicReady(true);
+    }
+  }, []);
+
+  // Function to authorize user with Apple Music
+  const authorizeAppleMusic = async () => {
+    if (!window.MusicKit) return;
+    const music = window.MusicKit.getInstance();
+    try {
+      const userToken = await music.authorize();
+      setAppleMusicUserToken(userToken);
+      console.log('[MusicKit] User authorized, token:', userToken);
+    } catch (err) {
+      console.error('[MusicKit] Authorization failed:', err);
+    }
+  };
+
+  // In playback/streaming effect, add Apple Music playback logic
   useEffect(() => {
     if (!currentTrack || !selectedPlaybackDevice) return;
     const canPlay =
@@ -391,9 +431,12 @@ export default function Session() {
           } else {
             console.warn('[Playback] Spotify SDK not ready or no token');
           }
-        } else if (currentTrack.source === 'appleMusic') {
-          // TODO: Integrate Apple Music JS SDK playback here
-          console.log('[Playback] Would play Apple Music track:', currentTrack);
+        } else if (currentTrack.source === 'appleMusic' && appleMusicUserToken) {
+          const music = window.MusicKit.getInstance();
+          music.setQueue({ song: currentTrack.appleMusicId }).then(() => {
+            music.play();
+            console.log('[MusicKit] Playing Apple Music track:', currentTrack.appleMusicId);
+          }).catch(e => console.error('[MusicKit] Error setting queue:', e));
         }
       } else {
         console.log('[Playback] Another device will play the track:', selectedPlaybackDevice);
@@ -425,7 +468,7 @@ export default function Session() {
         console.warn('[Playback] No device in session can play this track:', currentTrack);
       }
     }
-  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady]);
+  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken]);
 
   if (isInitializing) {
     return (
@@ -727,6 +770,12 @@ export default function Session() {
         volume={volume}
         onVolumeChange={handleVolumeChange}
       />
+      {/* Add Apple Music connect button to UI (above or below device selection) */}
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Button onClick={authorizeAppleMusic} disabled={!appleMusicReady || appleMusicUserToken}>
+          {appleMusicUserToken ? 'Apple Music Connected' : 'Connect Apple Music'}
+        </Button>
+      </Box>
     </Box>
   );
 } 
