@@ -562,6 +562,14 @@ export default function Session() {
         >
           Select Playback Device
         </Button>
+        <Button 
+          variant="outlined"
+          onClick={authorizeAppleMusic} 
+          disabled={!appleMusicReady || appleMusicUserToken}
+          startIcon={<QueueMusicIcon />}
+        >
+          {appleMusicUserToken ? 'Apple Music Connected' : 'Connect Apple Music'}
+        </Button>
         {selectedPlaybackDevice && (
           <Typography variant="body2" color="text.secondary">
             Playing on: {selectedPlaybackDevice.name}
@@ -770,12 +778,6 @@ export default function Session() {
         volume={volume}
         onVolumeChange={handleVolumeChange}
       />
-      {/* Add Apple Music connect button to UI (above or below device selection) */}
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Button onClick={authorizeAppleMusic} disabled={!appleMusicReady || appleMusicUserToken}>
-          {appleMusicUserToken ? 'Apple Music Connected' : 'Connect Apple Music'}
-        </Button>
-      </Box>
     </Box>
   );
 } 
