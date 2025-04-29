@@ -15,12 +15,17 @@ import {
 import {
   MusicNote as MusicNoteIcon,
   VolumeUp as VolumeUpIcon,
+  QueueMusic as QueueMusicIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+
+const APPLE_MUSIC_DEVELOPER_TOKEN = 'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlJXMjJVRDIyQTkifQ.eyJpYXQiOjE3NDU5NjE4NTksImV4cCI6MTc2MTUxMzg1OSwiaXNzIjoiTkxOQVROVDdWVSJ9.mOy9btGm3dGFpi-WRg82rrCAc1XTW-v-IPatLx0Tu_uL93ZSHrcRsB5bn7Y2mxTrZqsOGJn2p52f4AEHAah_Fg'; // Replace with your token
 
 const Settings = () => {
   const theme = useTheme();
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
+  const [isAppleMusicConnected, setIsAppleMusicConnected] = useState(false);
+  const [appleMusicReady, setAppleMusicReady] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
   const [highQuality, setHighQuality] = useState(true);
 
@@ -32,6 +37,34 @@ const Settings = () => {
     // For production, use the same domain
     return window.location.origin;
   };
+
+  // Initialize Apple Music
+  useEffect(() => {
+    if (!window.MusicKit) {
+      const script = document.createElement('script');
+      script.src = 'https://js-cdn.music.apple.com/musickit/v1/musickit.js';
+      script.async = true;
+      document.body.appendChild(script);
+      script.onload = () => {
+        window.MusicKit.configure({
+          developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
+          app: {
+            name: 'Harmony',
+            build: '1.0.0'
+          }
+        });
+        setAppleMusicReady(true);
+        // Check if user was previously connected
+        const connected = localStorage.getItem('apple_music_connected') === 'true';
+        setIsAppleMusicConnected(connected);
+        console.log('[MusicKit] Script loaded and configured');
+      };
+    } else {
+      setAppleMusicReady(true);
+      const connected = localStorage.getItem('apple_music_connected') === 'true';
+      setIsAppleMusicConnected(connected);
+    }
+  }, []);
 
   useEffect(() => {
     // Check if Spotify is connected
@@ -75,6 +108,27 @@ const Settings = () => {
     }
   };
 
+  const handleAppleMusicConnect = async () => {
+    if (isAppleMusicConnected) {
+      // Handle disconnect
+      localStorage.removeItem('apple_music_user_token');
+      localStorage.removeItem('apple_music_connected');
+      setIsAppleMusicConnected(false);
+    } else {
+      if (!window.MusicKit) return;
+      const music = window.MusicKit.getInstance();
+      try {
+        const userToken = await music.authorize();
+        localStorage.setItem('apple_music_user_token', userToken);
+        localStorage.setItem('apple_music_connected', 'true');
+        setIsAppleMusicConnected(true);
+        console.log('[MusicKit] User authorized, token:', userToken);
+      } catch (err) {
+        console.error('[MusicKit] Authorization failed:', err);
+      }
+    }
+  };
+
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
       <Typography variant="h4" component="h1" gutterBottom>
@@ -99,6 +153,26 @@ const Settings = () => {
                 color={isSpotifyConnected ? 'secondary' : 'primary'}
               >
                 {isSpotifyConnected ? 'Disconnect' : 'Connect'}
+              </Button>
+            </ListItemSecondaryAction>
+          </ListItem>
+          <Divider />
+          <ListItem>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <QueueMusicIcon sx={{ mr: 2, color: theme.palette.primary.main }} />
+              <ListItemText
+                primary="Apple Music Connection"
+                secondary={isAppleMusicConnected ? 'Connected' : 'Not connected'}
+              />
+            </Box>
+            <ListItemSecondaryAction>
+              <Button
+                variant="contained"
+                onClick={handleAppleMusicConnect}
+                disabled={!appleMusicReady}
+                color={isAppleMusicConnected ? 'secondary' : 'primary'}
+              >
+                {isAppleMusicConnected ? 'Disconnect' : 'Connect'}
               </Button>
             </ListItemSecondaryAction>
           </ListItem>
