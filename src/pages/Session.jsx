@@ -46,6 +46,7 @@ import PlayerBar from '../components/PlayerBar';
 import { queueService } from '../utils/queueService';
 import { v4 as uuidv4 } from 'uuid';
 import socket from '../../client/src/services/socket';
+import MusicPlayer from '../components/MusicPlayer';
 
 // TabPanel component for the tabs
 function TabPanel(props) {
@@ -795,6 +796,20 @@ export default function Session() {
         volume={volume}
         onVolumeChange={handleVolumeChange}
       />
+      {/* Unified MusicPlayer for actual playback */}
+      {isHost && (
+        <MusicPlayer
+          track={currentTrack}
+          isPlaying={isPlaying}
+          onPlayPause={handlePlayPause}
+          onSkipNext={handleSkipNext}
+          onSkipPrevious={handleSkipPrevious}
+          volume={volume}
+          onVolumeChange={handleVolumeChange}
+          spotifyPlayerRef={spotifyPlayerRef}
+          appleMusicUserToken={appleMusicUserToken}
+        />
+      )}
     </Box>
   );
 } 
