@@ -32,6 +32,18 @@ const MusicPlayer = ({
       const player = spotifyPlayerRef.current;
       const token = localStorage.getItem('spotify_access_token');
       if (!token) return;
+      
+      // Handle play/pause
+      if (isPlaying) {
+        player.resume();
+      } else {
+        player.pause();
+      }
+      
+      // Set volume
+      player.setVolume(volume / 100);
+      
+      // Handle track changes
       if (track.uri) {
         // Transfer playback to web player and play the track
         fetch('https://api.spotify.com/v1/me/player', {
@@ -49,17 +61,15 @@ const MusicPlayer = ({
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ uris: [track.uri] })
+          }).catch(e => {
+            console.error('[Playback] Error playing track:', e);
+            // Try to reconnect the player if there's an error
+            if (spotifyPlayerRef.current) {
+              spotifyPlayerRef.current.connect();
+            }
           });
-        });
+        }).catch(e => console.error('[Playback] Error transferring playback:', e));
       }
-      // Play/pause
-      if (isPlaying) {
-        player.resume();
-      } else {
-        player.pause();
-      }
-      // Set volume
-      player.setVolume(volume / 100);
     }
   }, [track, isPlaying, volume, spotifyPlayerRef]);
 

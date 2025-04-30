@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Paper,
   IconButton,
@@ -26,11 +26,41 @@ const PlayerBar = ({
   onVolumeChange
 }) => {
   const theme = useTheme();
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    let interval;
+    if (isPlaying && currentTrack) {
+      interval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= duration) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, currentTrack, duration]);
+
+  useEffect(() => {
+    if (currentTrack) {
+      setDuration(Math.floor(currentTrack.duration_ms / 1000));
+      setProgress(0);
+    }
+  }, [currentTrack]);
 
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleProgressChange = (event, newValue) => {
+    setProgress(newValue);
+    // TODO: Implement seeking in Spotify Web Playback SDK
   };
 
   return (
@@ -71,44 +101,30 @@ const PlayerBar = ({
         </Box>
 
         {/* Progress Bar */}
-        <Box sx={{ flexGrow: 2, mx: 2, display: { xs: 'none', sm: 'block' } }}>
+        <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {formatTime(progress)}
+          </Typography>
           <Slider
-            size="small"
-            value={currentTrack?.currentTime || 0}
-            max={currentTrack?.duration || 0}
-            sx={{
-              color: theme.palette.primary.main,
-              '& .MuiSlider-thumb': {
-                width: 8,
-                height: 8,
-              },
-            }}
-            disabled={!currentTrack}
+            value={progress}
+            max={duration}
+            onChange={handleProgressChange}
+            sx={{ mx: 2 }}
           />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography variant="caption" color="text.secondary">
-              {formatTime(currentTrack?.currentTime || 0)}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {formatTime(currentTrack?.duration || 0)}
-            </Typography>
-          </Box>
+          <Typography variant="body2" color="text.secondary">
+            {formatTime(duration)}
+          </Typography>
         </Box>
 
         {/* Volume Control */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: 100 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <VolumeUp />
           <Slider
-            size="small"
             value={volume}
-            onChange={onVolumeChange}
-            sx={{
-              color: theme.palette.primary.main,
-              '& .MuiSlider-thumb': {
-                width: 8,
-                height: 8,
-              },
-            }}
+            onChange={(e, newValue) => onVolumeChange(newValue)}
+            min={0}
+            max={100}
+            sx={{ width: 100 }}
           />
         </Box>
       </Box>
@@ -117,12 +133,7 @@ const PlayerBar = ({
 };
 
 PlayerBar.propTypes = {
-  currentTrack: PropTypes.shape({
-    title: PropTypes.string,
-    artist: PropTypes.string,
-    duration: PropTypes.number,
-    currentTime: PropTypes.number,
-  }),
+  currentTrack: PropTypes.object,
   isPlaying: PropTypes.bool.isRequired,
   onPlayPause: PropTypes.func.isRequired,
   onSkipNext: PropTypes.func.isRequired,

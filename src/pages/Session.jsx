@@ -393,6 +393,25 @@ export default function Session() {
       spotifyPlayer.addListener('authentication_error', e => console.error('[Spotify SDK] Auth error', e));
       spotifyPlayer.addListener('account_error', e => console.error('[Spotify SDK] Account error', e));
       spotifyPlayer.addListener('playback_error', e => console.error('[Spotify SDK] Playback error', e));
+      
+      // Add playback state listeners
+      spotifyPlayer.addListener('player_state_changed', state => {
+        if (state) {
+          console.log('[Spotify SDK] Player state changed:', state);
+          setIsPlaying(!state.paused);
+          // Update current track if it's different
+          if (state.track_window.current_track) {
+            const currentTrack = {
+              ...state.track_window.current_track,
+              title: state.track_window.current_track.name,
+              artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
+              source: 'spotify'
+            };
+            setCurrentTrack(currentTrack);
+          }
+        }
+      });
+      
       spotifyPlayer.connect();
     }
   }, [spotifyReady]);
