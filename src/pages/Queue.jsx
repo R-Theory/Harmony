@@ -206,32 +206,50 @@ const Queue = () => {
   };
 
   const handleAddToQueue = async (track) => {
-    const accessToken = getAccessToken();
-    if (!accessToken) {
-      showNotification('Please log in to Spotify first', 'error');
-      return;
-    }
-
-    try {
-      console.log('Adding track to queue:', track.name);
-      setLoading(true);
-      await queueService.addToQueue(track, accessToken);
-      showNotification(`Added "${track.name}" to queue`);
-      
-      // Refresh queue after adding
-      console.log('Refreshing queue after adding track');
-      queueService.getQueue(accessToken);
-    } catch (error) {
-      console.error('Error adding to queue:', error);
-      // Show more specific error message
-      const errorMessage = error.message.includes('No available Spotify devices found') 
-        ? 'No Spotify devices found. Please open Spotify and start playing on any device.'
-        : error.message.includes('Failed to add track to queue') 
-          ? 'Failed to add track. Please ensure Spotify is open and playing.'
-          : 'Failed to add track to queue';
-      showNotification(errorMessage, 'error');
-    } finally {
-      setLoading(false);
+    // Only require access token for Spotify
+    if (track.source === 'spotify') {
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        showNotification('Please log in to Spotify first', 'error');
+        return;
+      }
+      try {
+        console.log('[Queue] Adding Spotify track to queue:', track);
+        setLoading(true);
+        await queueService.addToQueue(track, accessToken);
+        showNotification(`Added "${track.name}" to queue`);
+        // Refresh queue after adding
+        console.log('[Queue] Refreshing queue after adding Spotify track');
+        queueService.getQueue(accessToken);
+      } catch (error) {
+        console.error('[Queue] Error adding Spotify track to queue:', error);
+        const errorMessage = error.message.includes('No available Spotify devices found')
+          ? 'No Spotify devices found. Please open Spotify and start playing on any device.'
+          : error.message.includes('Failed to add track to queue')
+            ? 'Failed to add track. Please ensure Spotify is open and playing.'
+            : `Failed to add Spotify track to queue: ${error.message}`;
+        showNotification(errorMessage, 'error');
+      } finally {
+        setLoading(false);
+      }
+    } else if (track.source === 'appleMusic') {
+      try {
+        console.log('[Queue] Adding Apple Music track to queue:', track);
+        setLoading(true);
+        await queueService.addToQueue(track); // No access token needed
+        showNotification(`Added "${track.name}" to queue`);
+        // Refresh queue after adding
+        console.log('[Queue] Refreshing queue after adding Apple Music track');
+        queueService.getQueue();
+      } catch (error) {
+        console.error('[Queue] Error adding Apple Music track to queue:', error);
+        showNotification(`Failed to add Apple Music track to queue: ${error.message}`, 'error');
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      showNotification('Unknown track source. Cannot add to queue.', 'error');
+      console.error('[Queue] Unknown track source:', track);
     }
   };
 
