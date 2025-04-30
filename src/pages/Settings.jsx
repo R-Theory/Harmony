@@ -41,49 +41,70 @@ const Settings = () => {
   // Initialize Apple Music
   useEffect(() => {
     const loadMusicKit = async () => {
-      if (!window.MusicKit) {
-        try {
-          const script = document.createElement('script');
-          script.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js'; // Updated to v3
-          script.async = true;
-          
-          // Create a promise to wait for script load
-          const scriptLoadPromise = new Promise((resolve, reject) => {
-            script.onload = resolve;
-            script.onerror = reject;
-          });
-
-          document.body.appendChild(script);
-          
-          // Wait for script to load
-          await scriptLoadPromise;
-          
-          // Wait a bit to ensure MusicKit is fully initialized
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          if (window.MusicKit) {
-            await window.MusicKit.configure({
-              developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
-              app: {
-                name: 'Harmony',
-                build: '1.0.0'
-              }
-            });
-            setAppleMusicReady(true);
-            // Check if user was previously connected
-            const connected = localStorage.getItem('apple_music_connected') === 'true';
-            setIsAppleMusicConnected(connected);
-            console.log('[MusicKit] Script loaded and configured successfully');
-          } else {
-            console.error('[MusicKit] MusicKit not available after script load');
-          }
-        } catch (error) {
-          console.error('[MusicKit] Error loading or configuring:', error);
+      try {
+        // Check if MusicKit is already loaded
+        if (window.MusicKit) {
+          console.log('[MusicKit] Already loaded');
+          setAppleMusicReady(true);
+          const connected = localStorage.getItem('apple_music_connected') === 'true';
+          setIsAppleMusicConnected(connected);
+          return;
         }
-      } else {
+
+        // Load MusicKit script
+        const script = document.createElement('script');
+        script.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js';
+        script.async = true;
+        
+        // Create a promise to wait for script load
+        const scriptLoadPromise = new Promise((resolve, reject) => {
+          script.onload = () => {
+            console.log('[MusicKit] Script loaded');
+            resolve();
+          };
+          script.onerror = (error) => {
+            console.error('[MusicKit] Script load failed:', error);
+            reject(error);
+          };
+        });
+
+        document.body.appendChild(script);
+        
+        // Wait for script to load
+        await scriptLoadPromise;
+        
+        // Wait for MusicKit to be available
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (!window.MusicKit && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          attempts++;
+        }
+
+        if (!window.MusicKit) {
+          throw new Error('MusicKit not available after loading script');
+        }
+
+        // Initialize MusicKit
+        const music = await window.MusicKit.configure({
+          developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
+          app: {
+            name: 'Harmony',
+            build: '1.0.0'
+          }
+        });
+
+        console.log('[MusicKit] Configured successfully');
         setAppleMusicReady(true);
+        
+        // Check if user was previously connected
         const connected = localStorage.getItem('apple_music_connected') === 'true';
         setIsAppleMusicConnected(connected);
+        
+      } catch (error) {
+        console.error('[MusicKit] Error during initialization:', error);
+        setAppleMusicReady(false);
       }
     };
 
@@ -141,15 +162,19 @@ const Settings = () => {
     } else {
       try {
         if (!window.MusicKit) {
-          console.error('[MusicKit] MusicKit not available');
-          return;
+          throw new Error('MusicKit not available');
         }
+        
         const music = window.MusicKit.getInstance();
+        if (!music) {
+          throw new Error('Failed to get MusicKit instance');
+        }
+        
         const userToken = await music.authorize();
         localStorage.setItem('apple_music_user_token', userToken);
         localStorage.setItem('apple_music_connected', 'true');
         setIsAppleMusicConnected(true);
-        console.log('[MusicKit] User authorized, token:', userToken);
+        console.log('[MusicKit] User authorized successfully');
       } catch (err) {
         console.error('[MusicKit] Authorization failed:', err);
       }
