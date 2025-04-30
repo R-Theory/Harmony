@@ -119,32 +119,10 @@ const Queue = () => {
 
   // Load initial queue
   useEffect(() => {
-    const loadQueue = async () => {
-      const accessToken = getAccessToken();
-      if (!accessToken) {
-        console.log('No access token available for initial queue load');
-        return;
-      }
-
-      try {
-        console.log('Loading initial queue');
-        setLoading(true);
-        
-        if (sessionId && queueService.isConnected) {
-          queueService.getQueue(accessToken);
-        } else {
-          console.log('Queue service not connected, attempting to connect...');
-          queueService.connect(sessionId);
-        }
-      } catch (error) {
-        console.error('Error loading queue:', error);
-        showNotification('Failed to load queue. Please try refreshing the page.', 'error');
-        setLoading(false);
-      }
-    };
-
-    loadQueue();
-  }, [sessionId]);
+    if (selectedService === 'spotify') {
+      fetchSpotifyQueue();
+    }
+  }, [sessionId, selectedService]);
 
   // Trigger WebRTC streaming when the next song is an Apple Music track
   useEffect(() => {
@@ -212,23 +190,29 @@ const Queue = () => {
   const handleAddToQueue = async (track) => {
     try {
       console.log('[Queue] Adding track to queue:', { track, sessionId });
-      const response = await fetch(`${BACKEND_BASE_URL}/api/queue/${sessionId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(track),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('[Queue] Error adding track:', error);
-        throw new Error(error.message || 'Failed to add track to queue');
+      if (track.source === 'spotify') {
+        const accessToken = getAccessToken();
+        if (!accessToken) {
+          showNotification('Please log in to Spotify first', 'error');
+          return;
+        }
+        const response = await fetch(`${BACKEND_BASE_URL}/api/queue/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token: accessToken, uri: track.uri }),
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          console.error('[Queue] Error adding track:', error);
+          throw new Error(error.error || 'Failed to add track to queue');
+        }
+        showNotification(`Added "${track.name}" to Spotify queue`);
+        // Optionally, fetch the updated queue
+        fetchSpotifyQueue();
+      } else if (track.source === 'appleMusic') {
+        // Existing Apple Music logic (if any)
+        showNotification('Apple Music queueing not implemented yet', 'info');
       }
-
-      const updatedQueue = await response.json();
-      console.log('[Queue] Successfully added track:', { track, updatedQueue });
-      setQueue(updatedQueue);
       setSearchResults([]);
       setSearchQuery('');
     } catch (error) {
@@ -239,23 +223,26 @@ const Queue = () => {
 
   const handleRemoveFromQueue = async (trackId) => {
     try {
-      console.log('[Queue] Removing track from queue:', { trackId, sessionId });
-      const response = await fetch(`${BACKEND_BASE_URL}/api/queue/${sessionId}/${trackId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('[Queue] Error removing track:', error);
-        throw new Error(error.message || 'Failed to remove track from queue');
-      }
-
-      const updatedQueue = await response.json();
-      console.log('[Queue] Successfully removed track:', { trackId, updatedQueue });
-      setQueue(updatedQueue);
+      // For Spotify, removing from queue is not supported; show info
+      showNotification('Removing from Spotify queue is not supported by the API', 'info');
     } catch (error) {
       console.error('[Queue] Error in handleRemoveFromQueue:', error);
       showNotification(error.message, 'error');
+    }
+  };
+
+  // Fetch Spotify queue
+  const fetchSpotifyQueue = async () => {
+    try {
+      const accessToken = getAccessToken();
+      if (!accessToken) return;
+      const response = await fetch(`${BACKEND_BASE_URL}/api/queue?access_token=${accessToken}`);
+      if (!response.ok) throw new Error('Failed to fetch Spotify queue');
+      const data = await response.json();
+      setQueue(data.queue || []);
+    } catch (error) {
+      console.error('[Queue] Error fetching Spotify queue:', error);
+      showNotification('Failed to fetch Spotify queue', 'error');
     }
   };
 
