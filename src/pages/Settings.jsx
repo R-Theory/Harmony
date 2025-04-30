@@ -46,7 +46,7 @@ const Settings = () => {
         if (!window.MusicKit) {
           console.log('[MusicKit] Not found on window, loading script...');
           const script = document.createElement('script');
-          script.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js';
+          script.src = 'https://js-cdn.music.apple.com/musickit/v1/musickit.js';
           script.async = true;
 
           const scriptLoadPromise = new Promise((resolve, reject) => {
@@ -62,6 +62,15 @@ const Settings = () => {
 
           document.body.appendChild(script);
           await scriptLoadPromise;
+
+          // Debug: Log the MusicKit object and its properties
+          console.log('[MusicKit] window.MusicKit:', window.MusicKit);
+          if (window.MusicKit) {
+            console.log('[MusicKit] typeof window.MusicKit:', typeof window.MusicKit);
+            console.log('[MusicKit] window.MusicKit keys:', Object.keys(window.MusicKit));
+            console.log('[MusicKit] typeof window.MusicKit.configure:', typeof window.MusicKit.configure);
+            console.log('[MusicKit] typeof window.MusicKit.getInstance:', typeof window.MusicKit.getInstance);
+          }
 
           // Wait for MusicKit to be available
           let attempts = 0;
