@@ -43,70 +43,78 @@ const Settings = () => {
     const loadMusicKit = async () => {
       try {
         // Check if MusicKit is already loaded
-        if (window.MusicKit) {
-          console.log('[MusicKit] Already loaded');
-          setAppleMusicReady(true);
-          const connected = localStorage.getItem('apple_music_connected') === 'true';
-          setIsAppleMusicConnected(connected);
-          return;
-        }
-
-        // Load MusicKit script
-        const script = document.createElement('script');
-        script.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js';
-        script.async = true;
-        
-        // Create a promise to wait for script load
-        const scriptLoadPromise = new Promise((resolve, reject) => {
-          script.onload = () => {
-            console.log('[MusicKit] Script loaded');
-            resolve();
-          };
-          script.onerror = (error) => {
-            console.error('[MusicKit] Script load failed:', error);
-            reject(error);
-          };
-        });
-
-        document.body.appendChild(script);
-        
-        // Wait for script to load
-        await scriptLoadPromise;
-        
-        // Wait for MusicKit to be available
-        let attempts = 0;
-        const maxAttempts = 10;
-        
-        while (!window.MusicKit && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          attempts++;
-        }
-
         if (!window.MusicKit) {
-          throw new Error('MusicKit not available after loading script');
+          console.log('[MusicKit] Not found on window, loading script...');
+          const script = document.createElement('script');
+          script.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js';
+          script.async = true;
+
+          const scriptLoadPromise = new Promise((resolve, reject) => {
+            script.onload = () => {
+              console.log('[MusicKit] Script loaded');
+              resolve();
+            };
+            script.onerror = (error) => {
+              console.error('[MusicKit] Script load failed:', error);
+              reject(error);
+            };
+          });
+
+          document.body.appendChild(script);
+          await scriptLoadPromise;
+
+          // Wait for MusicKit to be available
+          let attempts = 0;
+          const maxAttempts = 10;
+          while (!window.MusicKit && attempts < maxAttempts) {
+            console.log(`[MusicKit] Waiting for MusicKit to be available... attempt ${attempts + 1}`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            attempts++;
+          }
+          if (!window.MusicKit) {
+            throw new Error('MusicKit not available after loading script');
+          }
+        } else {
+          console.log('[MusicKit] Already present on window.');
         }
 
-        // Initialize MusicKit using the correct method
-        const music = window.MusicKit.getInstance();
-        if (!music) {
-          await window.MusicKit.configure({
+        // Always configure before getInstance
+        try {
+          console.log('[MusicKit] Calling configure...');
+          window.MusicKit.configure({
             developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
             app: {
               name: 'Harmony',
               build: '1.0.0'
             }
           });
+        } catch (confErr) {
+          console.error('[MusicKit] Error during configure:', confErr);
+          throw confErr;
         }
 
-        console.log('[MusicKit] Configured successfully');
+        // Now get the instance
+        let music;
+        try {
+          music = window.MusicKit.getInstance();
+          if (!music) {
+            throw new Error('MusicKit.getInstance() returned undefined');
+          }
+          console.log('[MusicKit] getInstance() succeeded:', music);
+        } catch (instErr) {
+          console.error('[MusicKit] Error getting instance:', instErr);
+          throw instErr;
+        }
+
         setAppleMusicReady(true);
-        
         // Check if user was previously connected
         const connected = localStorage.getItem('apple_music_connected') === 'true';
         setIsAppleMusicConnected(connected);
-        
       } catch (error) {
         console.error('[MusicKit] Error during initialization:', error);
+        if (error && error.stack) {
+          console.error('[MusicKit] Stack trace:', error.stack);
+        }
         setAppleMusicReady(false);
       }
     };
