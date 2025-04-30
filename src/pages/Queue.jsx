@@ -47,6 +47,9 @@ const Queue = () => {
   const theme = useTheme();
   const { sessionId } = useParams();
 
+  // Set your backend base URL here
+  const BACKEND_BASE_URL = 'https://harmony-backend-nxqv.onrender.com';
+
   // Detect connected services on mount
   useEffect(() => {
     const spotify = localStorage.getItem('spotify_connected') === 'true';
@@ -209,7 +212,7 @@ const Queue = () => {
   const handleAddToQueue = async (track) => {
     try {
       console.log('[Queue] Adding track to queue:', { track, sessionId });
-      const response = await fetch(`/api/queue/${sessionId}`, {
+      const response = await fetch(`${BACKEND_BASE_URL}/api/queue/${sessionId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -230,14 +233,14 @@ const Queue = () => {
       setSearchQuery('');
     } catch (error) {
       console.error('[Queue] Error in handleAddToQueue:', error);
-      setError(error.message);
+      showNotification(error.message, 'error');
     }
   };
 
   const handleRemoveFromQueue = async (trackId) => {
     try {
       console.log('[Queue] Removing track from queue:', { trackId, sessionId });
-      const response = await fetch(`/api/queue/${sessionId}/${trackId}`, {
+      const response = await fetch(`${BACKEND_BASE_URL}/api/queue/${sessionId}/${trackId}`, {
         method: 'DELETE',
       });
 
@@ -252,7 +255,7 @@ const Queue = () => {
       setQueue(updatedQueue);
     } catch (error) {
       console.error('[Queue] Error in handleRemoveFromQueue:', error);
-      setError(error.message);
+      showNotification(error.message, 'error');
     }
   };
 
