@@ -47,9 +47,6 @@ const Queue = () => {
   const theme = useTheme();
   const { sessionId } = useParams();
 
-  // Set your backend base URL here
-  const BACKEND_BASE_URL = 'https://harmony-backend-nxqv.onrender.com';
-
   // Detect connected services on mount
   useEffect(() => {
     const spotify = localStorage.getItem('spotify_connected') === 'true';
@@ -67,54 +64,29 @@ const Queue = () => {
     return token;
   };
 
-  // Initialize queue service connection
+  // Listen for queue updates from backend (Socket.IO)
   useEffect(() => {
-    if (sessionId) {
-      console.log('Initializing queue service for session:', sessionId);
-      
-      // Set up callbacks
-      queueService.setCallbacks(
-        // Queue update callback
-        (updatedQueue) => {
-          console.log('Queue update received in component:', updatedQueue);
-          setQueue(updatedQueue || []);
-          setLoading(false);
-        },
-        // Error callback
-        (errorMessage) => {
-          console.error('Queue error received in component:', errorMessage);
-          showNotification(errorMessage, 'error');
-          setLoading(false);
-        }
-      );
-
-      // Connect to the session
-      queueService.connect(sessionId);
-
-      // Set up periodic queue refresh with error handling
-      const refreshInterval = setInterval(() => {
-        const accessToken = getAccessToken();
-        if (accessToken && queueService.isConnected) {
-          console.log('Periodic queue refresh');
-          try {
-            queueService.getQueue(accessToken);
-          } catch (error) {
-            console.error('Error during periodic queue refresh:', error);
-            if (error.message.includes('Socket connection is not active')) {
-              // Try to reconnect
-              queueService.connect(sessionId);
-            }
-          }
-        }
-      }, 5000); // Refresh every 5 seconds
-
-      // Clean up on unmount
-      return () => {
-        console.log('Cleaning up queue service');
-        clearInterval(refreshInterval);
-        queueService.disconnect();
-      };
-    }
+    if (!sessionId) return;
+    setLoading(true);
+    queueService.setCallbacks(
+      (updatedQueue) => {
+        console.log('Queue update received in component:', updatedQueue);
+        setQueue(updatedQueue || []);
+        setLoading(false);
+      },
+      (errorMessage) => {
+        console.error('Queue error received in component:', errorMessage);
+        showNotification(errorMessage, 'error');
+        setLoading(false);
+      }
+    );
+    queueService.connect(sessionId);
+    // Initial fetch
+    queueService.getQueue();
+    return () => {
+      console.log('Cleaning up queue service');
+      queueService.disconnect();
+    };
   }, [sessionId]);
 
   // Load initial queue
@@ -189,45 +161,30 @@ const Queue = () => {
 
   const handleAddToQueue = async (track) => {
     try {
-      console.log('[Queue] Adding track to queue:', { track, sessionId });
-      if (track.source === 'spotify') {
-        const accessToken = getAccessToken();
-        if (!accessToken) {
-          showNotification('Please log in to Spotify first', 'error');
-          return;
-        }
-        const response = await fetch(`${BACKEND_BASE_URL}/api/queue/add`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ access_token: accessToken, uri: track.uri }),
-        });
-        if (!response.ok) {
-          const error = await response.json();
-          console.error('[Queue] Error adding track:', error);
-          throw new Error(error.error || 'Failed to add track to queue');
-        }
-        showNotification(`Added "${track.name}" to Spotify queue`);
-        // Optionally, fetch the updated queue
-        fetchSpotifyQueue();
-      } else if (track.source === 'appleMusic') {
-        // Existing Apple Music logic (if any)
-        showNotification('Apple Music queueing not implemented yet', 'info');
-      }
+      console.log('[Queue] Adding track to session queue:', { track, sessionId });
+      setLoading(true);
+      await queueService.addToQueue(track);
+      showNotification(`Added "${track.name}" to session queue`);
       setSearchResults([]);
       setSearchQuery('');
     } catch (error) {
       console.error('[Queue] Error in handleAddToQueue:', error);
       showNotification(error.message, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleRemoveFromQueue = async (trackId) => {
     try {
-      // For Spotify, removing from queue is not supported; show info
-      showNotification('Removing from Spotify queue is not supported by the API', 'info');
+      setLoading(true);
+      await queueService.removeFromQueue({ id: trackId });
+      showNotification('Removed track from session queue');
     } catch (error) {
       console.error('[Queue] Error in handleRemoveFromQueue:', error);
       showNotification(error.message, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -236,7 +193,12 @@ const Queue = () => {
     try {
       const accessToken = getAccessToken();
       if (!accessToken) return;
-      const response = await fetch(`${BACKEND_BASE_URL}/api/queue?access_token=${accessToken}`);
+      const response = await fetch(`https://api.spotify.com/v1/me/player/queue`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
       if (!response.ok) throw new Error('Failed to fetch Spotify queue');
       const data = await response.json();
       setQueue(data.queue || []);
