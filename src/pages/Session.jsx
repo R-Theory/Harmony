@@ -233,7 +233,18 @@ export default function Session() {
     queueService.setCallbacks(
       (updatedQueue) => {
         setQueue(updatedQueue || []);
+        // Ensure currentTrack is set to the first track in the queue
         setCurrentTrack((updatedQueue && updatedQueue.length > 0) ? updatedQueue[0] : null);
+        // Auto-select the host's device if none is selected
+        if (!selectedPlaybackDevice && isHost) {
+          setSelectedPlaybackDevice({
+            id: userId,
+            name: 'This Device (You)',
+            isHost: true,
+            hasSpotify,
+            hasAppleMusic
+          });
+        }
       },
       (errorMessage) => {
         setError({ message: errorMessage });
@@ -274,7 +285,7 @@ export default function Session() {
     return () => {
       queueService.disconnect();
     };
-  }, [sessionId, userId, hasSpotify, hasAppleMusic]);
+  }, [sessionId, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice]);
 
   // Playback control handlers
   const handlePlayPause = () => {
