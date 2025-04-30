@@ -32,7 +32,7 @@ import {
 import { searchTracks } from '../utils/spotify';
 import { queueService } from '../utils/queueService';
 import { useParams } from 'react-router-dom';
-import { ReactComponent as SpotifyIcon } from '../assets/spotify.svg';
+import spotifyIconUrl from '../assets/spotify.svg';
 
 const Queue = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -331,7 +331,7 @@ const Queue = () => {
                   </Avatar>
                   <Box sx={{ position: 'absolute', bottom: 0, right: 0, bgcolor: 'background.paper', borderRadius: '50%' }}>
                     {track.source === 'spotify' ? (
-                      <SpotifyIcon style={{ width: 20, height: 20, color: '#1DB954' }} />
+                      <img src={spotifyIconUrl} alt="Spotify" style={{ width: 20, height: 20 }} />
                     ) : track.source === 'appleMusic' ? (
                       <AppleIcon style={{ width: 20, height: 20, color: '#FC3C44' }} />
                     ) : null}
@@ -393,7 +393,7 @@ const Queue = () => {
                   </Avatar>
                   <Box sx={{ position: 'absolute', bottom: 0, right: 0, bgcolor: 'background.paper', borderRadius: '50%' }}>
                     {track.source === 'spotify' ? (
-                      <SpotifyIcon style={{ width: 20, height: 20, color: '#1DB954' }} />
+                      <img src={spotifyIconUrl} alt="Spotify" style={{ width: 20, height: 20 }} />
                     ) : track.source === 'appleMusic' ? (
                       <AppleIcon style={{ width: 20, height: 20, color: '#FC3C44' }} />
                     ) : null}
