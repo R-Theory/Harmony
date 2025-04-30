@@ -86,14 +86,17 @@ const Settings = () => {
           throw new Error('MusicKit not available after loading script');
         }
 
-        // Initialize MusicKit
-        const music = await window.MusicKit.configure({
-          developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
-          app: {
-            name: 'Harmony',
-            build: '1.0.0'
-          }
-        });
+        // Initialize MusicKit using the correct method
+        const music = window.MusicKit.getInstance();
+        if (!music) {
+          await window.MusicKit.configure({
+            developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
+            app: {
+              name: 'Harmony',
+              build: '1.0.0'
+            }
+          });
+        }
 
         console.log('[MusicKit] Configured successfully');
         setAppleMusicReady(true);
