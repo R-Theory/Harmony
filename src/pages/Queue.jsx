@@ -17,11 +17,17 @@ import {
   Avatar,
   Alert,
   Snackbar,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Search as SearchIcon,
+  Apple as AppleIcon,
+  MusicNote as MusicNoteIcon,
 } from '@mui/icons-material';
 import { searchTracks } from '../utils/spotify';
 import { queueService } from '../utils/queueService';
@@ -34,8 +40,21 @@ const Queue = () => {
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
+  const [isAppleMusicConnected, setIsAppleMusicConnected] = useState(false);
+  const [selectedService, setSelectedService] = useState('spotify');
   const theme = useTheme();
   const { sessionId } = useParams();
+
+  // Detect connected services on mount
+  useEffect(() => {
+    const spotify = localStorage.getItem('spotify_connected') === 'true';
+    const appleMusic = localStorage.getItem('apple_music_connected') === 'true';
+    setIsSpotifyConnected(spotify);
+    setIsAppleMusicConnected(appleMusic);
+    if (appleMusic) setSelectedService('appleMusic');
+    else if (spotify) setSelectedService('spotify');
+  }, []);
 
   // Get access token from URL or localStorage
   const getAccessToken = () => {
@@ -146,17 +165,38 @@ const Queue = () => {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    
-    const accessToken = getAccessToken();
-    if (!accessToken) {
-      showNotification('Please log in to Spotify first', 'error');
-      return;
-    }
-
+    setSearching(true);
+    setSearchResults([]);
     try {
-      setSearching(true);
-      const results = await searchTracks(searchQuery, accessToken);
-      setSearchResults(results);
+      if (selectedService === 'spotify') {
+        const accessToken = getAccessToken();
+        if (!accessToken) {
+          showNotification('Please log in to Spotify first', 'error');
+          return;
+        }
+        const results = await searchTracks(searchQuery, accessToken);
+        setSearchResults(results.map(track => ({ ...track, source: 'spotify' })));
+      } else if (selectedService === 'appleMusic') {
+        if (!window.MusicKit) {
+          showNotification('Apple MusicKit is not loaded', 'error');
+          return;
+        }
+        const music = window.MusicKit.getInstance();
+        const results = await music.api.search(searchQuery, { types: ['songs'], limit: 10 });
+        if (results.songs && results.songs.data) {
+          setSearchResults(results.songs.data.map(song => ({
+            id: song.id,
+            name: song.attributes.name,
+            artists: [{ name: song.attributes.artistName }],
+            album: { images: [{ url: song.attributes.artwork?.url?.replace('{w}x{h}bb', '100x100bb') }] },
+            duration_ms: song.attributes.durationInMillis,
+            source: 'appleMusic',
+            appleMusicId: song.id,
+          })));
+        } else {
+          setSearchResults([]);
+        }
+      }
     } catch (error) {
       console.error('Error searching tracks:', error);
       showNotification('Failed to search tracks', 'error');
@@ -235,6 +275,17 @@ const Queue = () => {
       {/* Search Section */}
       <Paper sx={{ p: 2, mb: 3, backgroundColor: theme.palette.background.paper }}>
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <FormControl sx={{ minWidth: 140 }}>
+            <InputLabel>Service</InputLabel>
+            <Select
+              value={selectedService}
+              onChange={(e) => setSelectedService(e.target.value)}
+              label="Service"
+            >
+              {isSpotifyConnected && <MenuItem value="spotify">Spotify</MenuItem>}
+              {isAppleMusicConnected && <MenuItem value="appleMusic">Apple Music</MenuItem>}
+            </Select>
+          </FormControl>
           <TextField
             fullWidth
             label="Search songs"
