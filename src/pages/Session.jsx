@@ -232,11 +232,12 @@ export default function Session() {
     // Set up queueService callbacks
     queueService.setCallbacks(
       (updatedQueue) => {
+        console.log('[DEBUG] queueService.setCallbacks - updatedQueue:', updatedQueue);
         setQueue(updatedQueue || []);
         // Ensure currentTrack is set to the first track in the queue, with title/artist fields for PlayerBar
         if (updatedQueue && updatedQueue.length > 0) {
           const track = updatedQueue[0];
-          setCurrentTrack({
+          const mappedTrack = {
             ...track,
             title: track.name || track.title,
             artist: track.artists
@@ -244,8 +245,11 @@ export default function Session() {
                   ? track.artists.map(a => a.name).join(', ')
                   : track.artists)
               : track.artist || ''
-          });
+          };
+          console.log('[DEBUG] Setting currentTrack:', mappedTrack);
+          setCurrentTrack(mappedTrack);
         } else {
+          console.log('[DEBUG] Setting currentTrack: null');
           setCurrentTrack(null);
         }
         // Auto-select the host's device if none is selected
@@ -817,6 +821,7 @@ export default function Session() {
         </DialogContent>
       </Dialog>
       {/* PlayerBar at the bottom */}
+      {console.log('[DEBUG] Rendering PlayerBar with currentTrack:', currentTrack)}
       <PlayerBar
         currentTrack={currentTrack}
         isPlaying={isPlaying}
