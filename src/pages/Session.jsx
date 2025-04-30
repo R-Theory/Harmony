@@ -24,6 +24,7 @@ import {
   CircularProgress,
   ListItemAvatar,
   Avatar,
+  Snackbar,
 } from '@mui/material';
 import {
   Mic as MicIcon,
@@ -522,6 +523,32 @@ export default function Session() {
     }
   }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying]);
 
+  // Add notification state for Queue
+  const [queueNotification, setQueueNotification] = useState({ open: false, message: '', severity: 'success' });
+
+  // Add handler for showing notifications in Queue
+  const showQueueNotification = (message, severity = 'success') => {
+    setQueueNotification({ open: true, message, severity });
+  };
+
+  // Add/Remove queue handlers for Queue
+  const handleAddToQueue = async (track) => {
+    try {
+      await queueService.addToQueue(track);
+      showQueueNotification(`Added "${track.name}" to session queue`);
+    } catch (error) {
+      showQueueNotification(error.message, 'error');
+    }
+  };
+  const handleRemoveFromQueue = async (trackId) => {
+    try {
+      await queueService.removeFromQueue({ id: trackId });
+      showQueueNotification('Removed track from session queue');
+    } catch (error) {
+      showQueueNotification(error.message, 'error');
+    }
+  };
+
   if (isInitializing) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -775,7 +802,27 @@ export default function Session() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <Queue />
+          <Queue
+            queue={queue}
+            loading={false}
+            onAddToQueue={handleAddToQueue}
+            onRemoveFromQueue={handleRemoveFromQueue}
+            showNotification={showQueueNotification}
+          />
+          <Snackbar
+            open={queueNotification.open}
+            autoHideDuration={6000}
+            onClose={() => setQueueNotification({ ...queueNotification, open: false })}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          >
+            <Alert
+              onClose={() => setQueueNotification({ ...queueNotification, open: false })}
+              severity={queueNotification.severity}
+              sx={{ width: '100%' }}
+            >
+              {queueNotification.message}
+            </Alert>
+          </Snackbar>
         </TabPanel>
       </Paper>
 

@@ -34,11 +34,15 @@ import { queueService } from '../utils/queueService';
 import { useParams } from 'react-router-dom';
 import spotifyIconUrl from '../assets/spotify.svg';
 
-const Queue = () => {
+const Queue = ({
+  queue,
+  loading,
+  onAddToQueue,
+  onRemoveFromQueue,
+  showNotification
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [queue, setQueue] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
@@ -62,59 +66,6 @@ const Queue = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('access_token') || localStorage.getItem('spotify_access_token');
     return token;
-  };
-
-  // Listen for queue updates from backend (Socket.IO)
-  useEffect(() => {
-    if (!sessionId) return;
-    setLoading(true);
-    queueService.setCallbacks(
-      (updatedQueue) => {
-        console.log('Queue update received in component:', updatedQueue);
-        setQueue(updatedQueue || []);
-        setLoading(false);
-      },
-      (errorMessage) => {
-        console.error('Queue error received in component:', errorMessage);
-        showNotification(errorMessage, 'error');
-        setLoading(false);
-      }
-    );
-    queueService.connect(sessionId);
-    // Initial fetch
-    queueService.getQueue();
-    return () => {
-      console.log('Cleaning up queue service');
-      queueService.disconnect();
-    };
-  }, [sessionId]);
-
-  // Load initial queue
-  useEffect(() => {
-    if (selectedService === 'spotify') {
-      fetchSpotifyQueue();
-    }
-  }, [sessionId, selectedService]);
-
-  // Trigger WebRTC streaming when the next song is an Apple Music track
-  useEffect(() => {
-    if (queue.length > 0) {
-      const nextTrack = queue[0];
-      if (nextTrack.source === 'appleMusic') {
-        // For demo: call global function (replace with context/props in real app)
-        if (typeof window.startWebRTCStreaming === 'function') {
-          window.startWebRTCStreaming();
-        }
-      }
-    }
-  }, [queue]);
-
-  const showNotification = (message, severity = 'success') => {
-    setNotification({ open: true, message, severity });
-  };
-
-  const handleCloseNotification = () => {
-    setNotification({ ...notification, open: false });
   };
 
   const handleSearch = async () => {
@@ -156,55 +107,6 @@ const Queue = () => {
       showNotification('Failed to search tracks', 'error');
     } finally {
       setSearching(false);
-    }
-  };
-
-  const handleAddToQueue = async (track) => {
-    try {
-      console.log('[Queue] Adding track to session queue:', { track, sessionId });
-      setLoading(true);
-      await queueService.addToQueue(track);
-      showNotification(`Added "${track.name}" to session queue`);
-      setSearchResults([]);
-      setSearchQuery('');
-    } catch (error) {
-      console.error('[Queue] Error in handleAddToQueue:', error);
-      showNotification(error.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRemoveFromQueue = async (trackId) => {
-    try {
-      setLoading(true);
-      await queueService.removeFromQueue({ id: trackId });
-      showNotification('Removed track from session queue');
-    } catch (error) {
-      console.error('[Queue] Error in handleRemoveFromQueue:', error);
-      showNotification(error.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch Spotify queue
-  const fetchSpotifyQueue = async () => {
-    try {
-      const accessToken = getAccessToken();
-      if (!accessToken) return;
-      const response = await fetch(`https://api.spotify.com/v1/me/player/queue`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      if (!response.ok) throw new Error('Failed to fetch Spotify queue');
-      const data = await response.json();
-      setQueue(data.queue || []);
-    } catch (error) {
-      console.error('[Queue] Error fetching Spotify queue:', error);
-      showNotification('Failed to fetch Spotify queue', 'error');
     }
   };
 
@@ -297,7 +199,7 @@ const Queue = () => {
                   <IconButton
                     edge="end"
                     aria-label="add"
-                    onClick={() => handleAddToQueue(track)}
+                    onClick={() => onAddToQueue(track)}
                   >
                     <AddIcon />
                   </IconButton>
@@ -359,7 +261,7 @@ const Queue = () => {
                   <IconButton
                     edge="end"
                     aria-label="delete"
-                    onClick={() => handleRemoveFromQueue(track.id)}
+                    onClick={() => onRemoveFromQueue(track.id)}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -374,11 +276,11 @@ const Queue = () => {
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={handleCloseNotification}
+        onClose={() => setNotification({ ...notification, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert
-          onClose={handleCloseNotification}
+          onClose={() => setNotification({ ...notification, open: false })}
           severity={notification.severity}
           sx={{ width: '100%' }}
         >
