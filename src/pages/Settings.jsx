@@ -42,64 +42,51 @@ const Settings = () => {
   useEffect(() => {
     const loadMusicKit = async () => {
       try {
-        // Check if MusicKit is already loaded
-        if (!window.MusicKit) {
-          console.log('[MusicKit] Not found on window, loading script...');
-          const script = document.createElement('script');
-          script.src = 'https://js-cdn.music.apple.com/musickit/v1/musickit.js';
-          script.async = true;
-
-          const scriptLoadPromise = new Promise((resolve, reject) => {
-            script.onload = () => {
-              console.log('[MusicKit] Script loaded');
-              resolve();
-            };
-            script.onerror = (error) => {
-              console.error('[MusicKit] Script load failed:', error);
-              reject(error);
-            };
-          });
-
-          document.body.appendChild(script);
-          await scriptLoadPromise;
-
-          // Debug: Log the MusicKit object and its properties
-          console.log('[MusicKit] window.MusicKit:', window.MusicKit);
-          if (window.MusicKit) {
-            console.log('[MusicKit] typeof window.MusicKit:', typeof window.MusicKit);
-            console.log('[MusicKit] window.MusicKit keys:', Object.keys(window.MusicKit));
-            console.log('[MusicKit] typeof window.MusicKit.configure:', typeof window.MusicKit.configure);
-            console.log('[MusicKit] typeof window.MusicKit.getInstance:', typeof window.MusicKit.getInstance);
+        // Set global MusicKitConfig before loading the script
+        window.MusicKitConfig = {
+          developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
+          app: {
+            name: 'Harmony',
+            build: '1.0.0'
           }
+        };
 
-          // Wait for MusicKit to be available
-          let attempts = 0;
-          const maxAttempts = 10;
-          while (!window.MusicKit && attempts < maxAttempts) {
-            console.log(`[MusicKit] Waiting for MusicKit to be available... attempt ${attempts + 1}`);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            attempts++;
-          }
-          if (!window.MusicKit) {
-            throw new Error('MusicKit not available after loading script');
-          }
-        } else {
-          console.log('[MusicKit] Already present on window.');
+        const script = document.createElement('script');
+        script.src = 'https://js-cdn.music.apple.com/musickit/v1/musickit.js';
+        script.async = true;
+
+        const scriptLoadPromise = new Promise((resolve, reject) => {
+          script.onload = () => {
+            console.log('[MusicKit] Script loaded');
+            resolve();
+          };
+          script.onerror = (error) => {
+            console.error('[MusicKit] Script load failed:', error);
+            reject(error);
+          };
+        });
+
+        document.body.appendChild(script);
+        await scriptLoadPromise;
+
+        // Debug: Log the MusicKit object and its properties
+        console.log('[MusicKit] window.MusicKit:', window.MusicKit);
+        if (window.MusicKit) {
+          console.log('[MusicKit] typeof window.MusicKit:', typeof window.MusicKit);
+          console.log('[MusicKit] window.MusicKit keys:', Object.keys(window.MusicKit));
+          console.log('[MusicKit] typeof window.MusicKit.getInstance:', typeof window.MusicKit.getInstance);
         }
 
-        // Always configure before getInstance
-        try {
-          console.log('[MusicKit] Calling configure...');
-          window.MusicKit.configure({
-            developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
-            app: {
-              name: 'Harmony',
-              build: '1.0.0'
-            }
-          });
-        } catch (confErr) {
-          console.error('[MusicKit] Error during configure:', confErr);
-          throw confErr;
+        // Wait for MusicKit to be available
+        let attempts = 0;
+        const maxAttempts = 10;
+        while ((!window.MusicKit || typeof window.MusicKit.getInstance !== 'function') && attempts < maxAttempts) {
+          console.log(`[MusicKit] Waiting for MusicKit.getInstance to be available... attempt ${attempts + 1}`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          attempts++;
+        }
+        if (!window.MusicKit || typeof window.MusicKit.getInstance !== 'function') {
+          throw new Error('MusicKit.getInstance not available after loading script');
         }
 
         // Now get the instance
