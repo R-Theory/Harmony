@@ -302,10 +302,14 @@ export default function Session() {
 
   // Playback control handlers
   const handlePlayPause = () => {
+    console.log('[DEBUG] handlePlayPause called');
+    console.log('[DEBUG] isPlaying before toggle:', isPlaying);
+    console.log('[DEBUG] currentTrack:', currentTrack);
+    console.log('[DEBUG] selectedPlaybackDevice:', selectedPlaybackDevice);
     setIsPlaying((prev) => !prev);
-    console.log('[PlayerBar] Play/Pause toggled:', !isPlaying);
-    console.log('[PlayerBar] Current track:', currentTrack);
-    console.log('[PlayerBar] Selected device:', selectedPlaybackDevice);
+    setTimeout(() => {
+      console.log('[DEBUG] isPlaying after toggle:', !isPlaying);
+    }, 0);
   };
   const handleSkipNext = () => {
     // For now, just log and set next track as current
@@ -424,6 +428,10 @@ export default function Session() {
 
   // In playback/streaming effect, add Apple Music playback logic
   useEffect(() => {
+    console.log('[DEBUG] Playback effect triggered');
+    console.log('[DEBUG] currentTrack:', currentTrack);
+    console.log('[DEBUG] selectedPlaybackDevice:', selectedPlaybackDevice);
+    console.log('[DEBUG] isPlaying:', isPlaying);
     if (!currentTrack || !selectedPlaybackDevice) {
       console.log('[Playback] No current track or selected device:', { currentTrack, selectedPlaybackDevice });
       return;
@@ -432,7 +440,6 @@ export default function Session() {
       (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) ||
       (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic);
     console.log('[Playback] Can play track:', { canPlay, trackSource: currentTrack.source, deviceCapabilities: selectedPlaybackDevice });
-    
     if (canPlay) {
       if (selectedPlaybackDevice.id === userId) {
         console.log('[Playback] This device will play the track');
@@ -489,7 +496,6 @@ export default function Session() {
         (currentTrack.source === 'appleMusic' && d.hasAppleMusic)
       );
       console.log('[Playback] Looking for capable device:', { allDevices, capableDevice });
-      
       if (capableDevice) {
         if (capableDevice.id === userId) {
           // This device should stream audio to the selected device
@@ -510,7 +516,7 @@ export default function Session() {
         console.warn('[Playback] No device in session can play this track:', currentTrack);
       }
     }
-  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken]);
+  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying]);
 
   if (isInitializing) {
     return (
