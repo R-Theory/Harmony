@@ -279,6 +279,8 @@ export default function Session() {
   const handlePlayPause = () => {
     setIsPlaying((prev) => !prev);
     console.log('[PlayerBar] Play/Pause toggled:', !isPlaying);
+    console.log('[PlayerBar] Current track:', currentTrack);
+    console.log('[PlayerBar] Selected device:', selectedPlaybackDevice);
   };
   const handleSkipNext = () => {
     // For now, just log and set next track as current
@@ -397,16 +399,23 @@ export default function Session() {
 
   // In playback/streaming effect, add Apple Music playback logic
   useEffect(() => {
-    if (!currentTrack || !selectedPlaybackDevice) return;
+    if (!currentTrack || !selectedPlaybackDevice) {
+      console.log('[Playback] No current track or selected device:', { currentTrack, selectedPlaybackDevice });
+      return;
+    }
     const canPlay =
       (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) ||
       (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic);
+    console.log('[Playback] Can play track:', { canPlay, trackSource: currentTrack.source, deviceCapabilities: selectedPlaybackDevice });
+    
     if (canPlay) {
       if (selectedPlaybackDevice.id === userId) {
+        console.log('[Playback] This device will play the track');
         if (currentTrack.source === 'spotify') {
           // Play Spotify track using SDK
           const token = localStorage.getItem('spotify_access_token');
           if (window.Spotify && spotifyPlayerRef.current && token) {
+            console.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
             // Transfer playback to web player
             fetch('https://api.spotify.com/v1/me/player', {
               method: 'PUT',
@@ -416,6 +425,7 @@ export default function Session() {
               },
               body: JSON.stringify({ device_ids: [spotifyPlayerRef.current._options.id], play: true })
             }).then(() => {
+              console.log('[Playback] Successfully transferred playback to web player');
               // Play the track
               fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyPlayerRef.current._options.id}`, {
                 method: 'PUT',
@@ -425,17 +435,22 @@ export default function Session() {
                 },
                 body: JSON.stringify({ uris: [currentTrack.uri] })
               }).then(() => {
-                console.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
+                console.log('[Playback] Successfully started playing Spotify track');
               }).catch(e => console.error('[Playback] Error playing track:', e));
             }).catch(e => console.error('[Playback] Error transferring playback:', e));
           } else {
-            console.warn('[Playback] Spotify SDK not ready or no token');
+            console.warn('[Playback] Spotify SDK not ready or no token:', {
+              hasSpotifySDK: !!window.Spotify,
+              hasPlayerRef: !!spotifyPlayerRef.current,
+              hasToken: !!token
+            });
           }
         } else if (currentTrack.source === 'appleMusic' && appleMusicUserToken) {
+          console.log('[Playback] Playing Apple Music track:', currentTrack.appleMusicId);
           const music = window.MusicKit.getInstance();
           music.setQueue({ song: currentTrack.appleMusicId }).then(() => {
             music.play();
-            console.log('[MusicKit] Playing Apple Music track:', currentTrack.appleMusicId);
+            console.log('[MusicKit] Successfully started playing Apple Music track');
           }).catch(e => console.error('[MusicKit] Error setting queue:', e));
         }
       } else {
@@ -448,6 +463,8 @@ export default function Session() {
         (currentTrack.source === 'spotify' && d.hasSpotify) ||
         (currentTrack.source === 'appleMusic' && d.hasAppleMusic)
       );
+      console.log('[Playback] Looking for capable device:', { allDevices, capableDevice });
+      
       if (capableDevice) {
         if (capableDevice.id === userId) {
           // This device should stream audio to the selected device

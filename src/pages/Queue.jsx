@@ -207,74 +207,52 @@ const Queue = () => {
   };
 
   const handleAddToQueue = async (track) => {
-    // Only require access token for Spotify
-    if (track.source === 'spotify') {
-      const accessToken = getAccessToken();
-      if (!accessToken) {
-        showNotification('Please log in to Spotify first', 'error');
-        return;
+    try {
+      console.log('[Queue] Adding track to queue:', { track, sessionId });
+      const response = await fetch(`/api/queue/${sessionId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(track),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('[Queue] Error adding track:', error);
+        throw new Error(error.message || 'Failed to add track to queue');
       }
-      try {
-        console.log('[Queue] Adding Spotify track to queue:', track);
-        setLoading(true);
-        await queueService.addToQueue(track, accessToken);
-        showNotification(`Added "${track.name}" to queue`);
-        // Refresh queue after adding
-        console.log('[Queue] Refreshing queue after adding Spotify track');
-        queueService.getQueue(accessToken);
-      } catch (error) {
-        console.error('[Queue] Error adding Spotify track to queue:', error);
-        const errorMessage = error.message.includes('No available Spotify devices found')
-          ? 'No Spotify devices found. Please open Spotify and start playing on any device.'
-          : error.message.includes('Failed to add track to queue')
-            ? 'Failed to add track. Please ensure Spotify is open and playing.'
-            : `Failed to add Spotify track to queue: ${error.message}`;
-        showNotification(errorMessage, 'error');
-      } finally {
-        setLoading(false);
-      }
-    } else if (track.source === 'appleMusic') {
-      try {
-        console.log('[Queue] Adding Apple Music track to queue:', track);
-        setLoading(true);
-        await queueService.addToQueue(track); // No access token needed
-        showNotification(`Added "${track.name}" to queue`);
-        // Refresh queue after adding
-        console.log('[Queue] Refreshing queue after adding Apple Music track');
-        queueService.getQueue();
-      } catch (error) {
-        console.error('[Queue] Error adding Apple Music track to queue:', error);
-        showNotification(`Failed to add Apple Music track to queue: ${error.message}`, 'error');
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      showNotification('Unknown track source. Cannot add to queue.', 'error');
-      console.error('[Queue] Unknown track source:', track);
+
+      const updatedQueue = await response.json();
+      console.log('[Queue] Successfully added track:', { track, updatedQueue });
+      setQueue(updatedQueue);
+      setSearchResults([]);
+      setSearchQuery('');
+    } catch (error) {
+      console.error('[Queue] Error in handleAddToQueue:', error);
+      setError(error.message);
     }
   };
 
-  const handleRemoveFromQueue = async (track) => {
-    const accessToken = getAccessToken();
-    if (!accessToken) {
-      showNotification('Please log in to Spotify first', 'error');
-      return;
-    }
-
+  const handleRemoveFromQueue = async (trackId) => {
     try {
-      console.log('Removing track from queue:', track.name);
-      setLoading(true);
-      await queueService.removeFromQueue(track, accessToken);
-      showNotification('Removed track from queue');
-      
-      // Refresh queue after removing
-      console.log('Refreshing queue after removing track');
-      queueService.getQueue(accessToken);
+      console.log('[Queue] Removing track from queue:', { trackId, sessionId });
+      const response = await fetch(`/api/queue/${sessionId}/${trackId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('[Queue] Error removing track:', error);
+        throw new Error(error.message || 'Failed to remove track from queue');
+      }
+
+      const updatedQueue = await response.json();
+      console.log('[Queue] Successfully removed track:', { trackId, updatedQueue });
+      setQueue(updatedQueue);
     } catch (error) {
-      console.error('Error removing from queue:', error);
-      showNotification('Failed to remove track from queue', 'error');
-    } finally {
-      setLoading(false);
+      console.error('[Queue] Error in handleRemoveFromQueue:', error);
+      setError(error.message);
     }
   };
 
@@ -429,7 +407,7 @@ const Queue = () => {
                   <IconButton
                     edge="end"
                     aria-label="delete"
-                    onClick={() => handleRemoveFromQueue(track)}
+                    onClick={() => handleRemoveFromQueue(track.id)}
                   >
                     <DeleteIcon />
                   </IconButton>
