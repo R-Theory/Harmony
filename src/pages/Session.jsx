@@ -233,8 +233,21 @@ export default function Session() {
     queueService.setCallbacks(
       (updatedQueue) => {
         setQueue(updatedQueue || []);
-        // Ensure currentTrack is set to the first track in the queue
-        setCurrentTrack((updatedQueue && updatedQueue.length > 0) ? updatedQueue[0] : null);
+        // Ensure currentTrack is set to the first track in the queue, with title/artist fields for PlayerBar
+        if (updatedQueue && updatedQueue.length > 0) {
+          const track = updatedQueue[0];
+          setCurrentTrack({
+            ...track,
+            title: track.name || track.title,
+            artist: track.artists
+              ? (Array.isArray(track.artists)
+                  ? track.artists.map(a => a.name).join(', ')
+                  : track.artists)
+              : track.artist || ''
+          });
+        } else {
+          setCurrentTrack(null);
+        }
         // Auto-select the host's device if none is selected
         if (!selectedPlaybackDevice && isHost) {
           setSelectedPlaybackDevice({
