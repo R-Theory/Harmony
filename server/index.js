@@ -324,9 +324,12 @@ app.get('/api/login', (req, res) => {
       'user-read-email',
       'user-read-playback-state',
       'user-modify-playback-state',
+      'streaming',
       'playlist-read-private',
       'playlist-modify-public',
-      'playlist-modify-private'
+      'playlist-modify-private',
+      'playlist-read-collaborative',
+      'user-library-read' // liked songs
     ];
     
     const authorizeURL = spotifyApi.createAuthorizeURL(scopes);

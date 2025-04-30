@@ -32,6 +32,7 @@ import {
 import { searchTracks } from '../utils/spotify';
 import { queueService } from '../utils/queueService';
 import { useParams } from 'react-router-dom';
+import { ReactComponent as SpotifyIcon } from '../assets/spotify.svg';
 
 const Queue = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -345,7 +346,18 @@ const Queue = () => {
                     alt={track.name} 
                     src={track.album.images[0]?.url} 
                     variant="rounded"
-                  />
+                    sx={{ border: track.source === 'spotify' ? '2px solid #1DB954' : '2px solid #FC3C44', bgcolor: 'background.paper', position: 'relative' }}
+                  >
+                    {/* Fallback: show first letter if no image */}
+                    {(!track.album.images[0]?.url && track.name) ? track.name[0] : null}
+                  </Avatar>
+                  <Box sx={{ position: 'absolute', bottom: 0, right: 0, bgcolor: 'background.paper', borderRadius: '50%' }}>
+                    {track.source === 'spotify' ? (
+                      <SpotifyIcon style={{ width: 20, height: 20, color: '#1DB954' }} />
+                    ) : track.source === 'appleMusic' ? (
+                      <AppleIcon style={{ width: 20, height: 20, color: '#FC3C44' }} />
+                    ) : null}
+                  </Box>
                 </ListItemAvatar>
                 <ListItemText
                   primary={track.name}
@@ -396,7 +408,18 @@ const Queue = () => {
                     alt={track.name} 
                     src={track.album.images[0]?.url} 
                     variant="rounded"
-                  />
+                    sx={{ border: track.source === 'spotify' ? '2px solid #1DB954' : '2px solid #FC3C44', bgcolor: 'background.paper', position: 'relative' }}
+                  >
+                    {/* Fallback: show first letter if no image */}
+                    {(!track.album.images[0]?.url && track.name) ? track.name[0] : null}
+                  </Avatar>
+                  <Box sx={{ position: 'absolute', bottom: 0, right: 0, bgcolor: 'background.paper', borderRadius: '50%' }}>
+                    {track.source === 'spotify' ? (
+                      <SpotifyIcon style={{ width: 20, height: 20, color: '#1DB954' }} />
+                    ) : track.source === 'appleMusic' ? (
+                      <AppleIcon style={{ width: 20, height: 20, color: '#FC3C44' }} />
+                    ) : null}
+                  </Box>
                 </ListItemAvatar>
                 <ListItemText
                   primary={track.name}
