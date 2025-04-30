@@ -40,82 +40,24 @@ const Settings = () => {
 
   // Initialize Apple Music
   useEffect(() => {
-    const loadMusicKit = async () => {
-      try {
-        // Set global MusicKitConfig before loading the script
-        window.MusicKitConfig = {
-          developerToken: APPLE_MUSIC_DEVELOPER_TOKEN,
-          app: {
-            name: 'Harmony',
-            build: '1.0.0'
-          }
-        };
+    let attempts = 0;
+    const maxAttempts = 10;
 
-        const script = document.createElement('script');
-        script.src = 'https://js-cdn.music.apple.com/musickit/v1/musickit.js';
-        script.async = true;
-
-        const scriptLoadPromise = new Promise((resolve, reject) => {
-          script.onload = () => {
-            console.log('[MusicKit] Script loaded');
-            resolve();
-          };
-          script.onerror = (error) => {
-            console.error('[MusicKit] Script load failed:', error);
-            reject(error);
-          };
-        });
-
-        document.body.appendChild(script);
-        await scriptLoadPromise;
-
-        // Debug: Log the MusicKit object and its properties
-        console.log('[MusicKit] window.MusicKit:', window.MusicKit);
-        if (window.MusicKit) {
-          console.log('[MusicKit] typeof window.MusicKit:', typeof window.MusicKit);
-          console.log('[MusicKit] window.MusicKit keys:', Object.keys(window.MusicKit));
-          console.log('[MusicKit] typeof window.MusicKit.getInstance:', typeof window.MusicKit.getInstance);
-        }
-
-        // Wait for MusicKit to be available
-        let attempts = 0;
-        const maxAttempts = 10;
-        while ((!window.MusicKit || typeof window.MusicKit.getInstance !== 'function') && attempts < maxAttempts) {
-          console.log(`[MusicKit] Waiting for MusicKit.getInstance to be available... attempt ${attempts + 1}`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-          attempts++;
-        }
-        if (!window.MusicKit || typeof window.MusicKit.getInstance !== 'function') {
-          throw new Error('MusicKit.getInstance not available after loading script');
-        }
-
-        // Now get the instance
-        let music;
-        try {
-          music = window.MusicKit.getInstance();
-          if (!music) {
-            throw new Error('MusicKit.getInstance() returned undefined');
-          }
-          console.log('[MusicKit] getInstance() succeeded:', music);
-        } catch (instErr) {
-          console.error('[MusicKit] Error getting instance:', instErr);
-          throw instErr;
-        }
-
+    const checkMusicKit = () => {
+      if (window.MusicKit && typeof window.MusicKit.getInstance === 'function') {
         setAppleMusicReady(true);
-        // Check if user was previously connected
         const connected = localStorage.getItem('apple_music_connected') === 'true';
         setIsAppleMusicConnected(connected);
-      } catch (error) {
-        console.error('[MusicKit] Error during initialization:', error);
-        if (error && error.stack) {
-          console.error('[MusicKit] Stack trace:', error.stack);
-        }
+      } else if (attempts < maxAttempts) {
+        attempts++;
+        setTimeout(checkMusicKit, 500);
+      } else {
         setAppleMusicReady(false);
+        console.error('[MusicKit] MusicKit JS did not initialize.');
       }
     };
 
-    loadMusicKit();
+    checkMusicKit();
   }, []);
 
   useEffect(() => {

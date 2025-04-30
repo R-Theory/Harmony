@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>MusicKit JS Minimal Test</title>
+    <!-- Replace with your actual developer token -->
+    <meta name="apple-music-developer-token" content="eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlJXMjJVRDIyQTkifQ.eyJpYXQiOjE3NDU5NjE4NTksImV4cCI6MTc2MTUxMzg1OSwiaXNzIjoiTkxOQVROVDdWVSJ9.mOy9btGm3dGFpi-WRg82rrCAc1XTW-v-IPatLx0Tu_uL93ZSHrcRsB5bn7Y2mxTrZqsOGJn2p52f4AEHAah_Fg">
+    <meta name="apple-music-app-name" content="Harmony">
+    <meta name="apple-music-app-build" content="1.0.0">
+    <script src="https://js-cdn.music.apple.com/musickit/v1/musickit.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(() => {
+          console.log('window.MusicKit:', window.MusicKit);
+          if (window.MusicKit) {
+            console.log('typeof window.MusicKit.getInstance:', typeof window.MusicKit.getInstance);
+            try {
+              const music = window.MusicKit.getInstance();
+              console.log('MusicKit instance:', music);
+            } catch (e) {
+              console.error('Error getting MusicKit instance:', e);
+            }
+          }
+        }, 2000);
+      });
+    </script>
+  </head>
+  <body>
+    <h1>MusicKit JS Minimal Test</h1>
+    <p>Open the browser console to see the output.</p>
+  </body>
+</html>
