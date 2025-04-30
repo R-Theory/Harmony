@@ -48,6 +48,16 @@ const Settings = () => {
         setAppleMusicReady(true);
         const connected = localStorage.getItem('apple_music_connected') === 'true';
         setIsAppleMusicConnected(connected);
+        if (connected) {
+          const userToken = localStorage.getItem('apple_music_user_token');
+          console.log('[Apple Music] Connected and ready:', {
+            userToken,
+            connected,
+            ready: true
+          });
+        } else {
+          console.log('[Apple Music] Not connected, but MusicKit is ready.');
+        }
       } else if (attempts < maxAttempts) {
         attempts++;
         setTimeout(checkMusicKit, 500);
