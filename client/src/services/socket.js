@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import DebugLogger from '../utils/debug';
+import DebugLogger from '../../src/utils/debug';
 
 const debug = new DebugLogger('Socket');
 
