@@ -48,6 +48,10 @@ import { queueService } from '../utils/queueService';
 import { v4 as uuidv4 } from 'uuid';
 import socket from '../../client/src/services/socket';
 import MusicPlayer from '../components/MusicPlayer';
+import Search from '../components/Search';
+import DebugLogger from '../utils/debug';
+
+const debug = new DebugLogger('Session');
 
 // TabPanel component for the tabs
 function TabPanel(props) {
@@ -126,6 +130,14 @@ export default function Session() {
   };
   
   useEffect(() => {
+    if (!sessionId) {
+      const newSessionId = uuidv4();
+      navigate(`/session/${newSessionId}`);
+      return;
+    }
+
+    debug.log('Initializing session', { sessionId });
+
     // Determine if this user is the host
     let userIsHost = false;
     if (sessionId === 'new') {
@@ -154,7 +166,7 @@ export default function Session() {
       console.log('[Session] Cleanup: isHost removed from localStorage.');
       if (peerConnection) peerConnection.close();
     };
-  }, [sessionId]);
+  }, [sessionId, navigate]);
   
   // Toggle mute
   const toggleMute = () => {
@@ -233,9 +245,18 @@ export default function Session() {
     // Set up queueService callbacks
     queueService.setCallbacks(
       (updatedQueue) => {
-        console.log('[DEBUG] queueService.setCallbacks - updatedQueue:', updatedQueue);
+        const now = Date.now();
+        if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL) {
+          debug.log('Queue update rate limited', {
+            timeSinceLastUpdate: now - lastQueueUpdate,
+            requiredInterval: QUEUE_UPDATE_INTERVAL
+          });
+          return;
+        }
+
+        setLastQueueUpdate(now);
         setQueue(updatedQueue || []);
-        // Ensure currentTrack is set to the first track in the queue, with title/artist fields for PlayerBar
+        
         if (updatedQueue && updatedQueue.length > 0) {
           const track = updatedQueue[0];
           const mappedTrack = {
@@ -247,10 +268,15 @@ export default function Session() {
                   : track.artists)
               : track.artist || ''
           };
-          console.log('[DEBUG] Setting currentTrack:', mappedTrack);
+          
+          debug.log('Updating current track', {
+            previousTrack: currentTrack,
+            newTrack: mappedTrack
+          });
+          
           setCurrentTrack(mappedTrack);
         } else {
-          console.log('[DEBUG] Setting currentTrack: null');
+          debug.log('Queue empty, clearing current track');
           setCurrentTrack(null);
         }
         // Auto-select the host's device if none is selected
@@ -265,6 +291,7 @@ export default function Session() {
         }
       },
       (errorMessage) => {
+        debug.logError(errorMessage, 'queueService');
         setError({ message: errorMessage });
       }
     );
@@ -303,21 +330,31 @@ export default function Session() {
     return () => {
       queueService.disconnect();
     };
-  }, [sessionId, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice]);
+  }, [sessionId, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice, lastQueueUpdate]);
 
   // Playback control handlers
   const handlePlayPause = () => {
     if (!currentTrack) return;
+    
+    debug.log('Play/Pause triggered', {
+      currentTrack,
+      wasPlaying: isPlaying,
+      willPlay: !isPlaying
+    });
+    
     setIsPlaying(prev => !prev);
   };
 
   const handleSkipNext = () => {
     if (!queue || queue.length <= 1) return;
     
-    // Remove the first track and update currentTrack
+    debug.log('Skipping to next track', {
+      currentTrack,
+      nextTrack: queue[1]
+    });
+    
     const newQueue = queue.slice(1);
     setQueue(newQueue);
-    
     if (newQueue.length > 0) {
       const nextTrack = newQueue[0];
       const mappedTrack = {
@@ -387,46 +424,107 @@ export default function Session() {
   useEffect(() => {
     if (spotifyReady && !spotifyPlayerRef.current) {
       const token = localStorage.getItem('spotify_access_token');
-      if (!token) return;
-      spotifyPlayer = new window.Spotify.Player({
-        name: 'Harmony Web Player',
-        getOAuthToken: cb => { cb(token); },
-        volume: 0.8
-      });
-      spotifyPlayer.addListener('ready', ({ device_id }) => {
-        console.log('[Spotify SDK] Player ready with device_id', device_id);
-        spotifyPlayerRef.current = spotifyPlayer;
-        setSpotifyDeviceId(device_id);
-      });
-      spotifyPlayer.addListener('not_ready', ({ device_id }) => {
-        console.log('[Spotify SDK] Player not ready', device_id);
-      });
-      spotifyPlayer.addListener('initialization_error', e => console.error('[Spotify SDK] Init error', e));
-      spotifyPlayer.addListener('authentication_error', e => console.error('[Spotify SDK] Auth error', e));
-      spotifyPlayer.addListener('account_error', e => console.error('[Spotify SDK] Account error', e));
-      spotifyPlayer.addListener('playback_error', e => console.error('[Spotify SDK] Playback error', e));
-      
-      // Add playback state listeners
-      spotifyPlayer.addListener('player_state_changed', state => {
-        if (state) {
-          console.log('[Spotify SDK] Player state changed:', state);
-          setIsPlaying(!state.paused);
-          // Update current track if it's different
-          if (state.track_window.current_track) {
-            const currentTrack = {
-              ...state.track_window.current_track,
-              title: state.track_window.current_track.name,
-              artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
-              source: 'spotify'
-            };
-            setCurrentTrack(currentTrack);
-          }
+      if (!token) {
+        console.error('[Spotify] No access token found');
+        return;
+      }
+
+      // Check if token is expired
+      const tokenExpiry = localStorage.getItem('spotify_token_expiry');
+      if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {
+        console.log('[Spotify] Token expired, attempting to refresh...');
+        const refreshToken = localStorage.getItem('spotify_refresh_token');
+        if (refreshToken) {
+          fetch(`${window.location.origin}/api/refresh_token?refresh_token=${refreshToken}`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.access_token) {
+                localStorage.setItem('spotify_access_token', data.access_token);
+                localStorage.setItem('spotify_token_expiry', (Date.now() + 3600000).toString());
+                initializeSpotifyPlayer(data.access_token);
+              } else {
+                console.error('[Spotify] Failed to refresh token');
+                localStorage.removeItem('spotify_access_token');
+                localStorage.removeItem('spotify_refresh_token');
+                localStorage.removeItem('spotify_connected');
+              }
+            })
+            .catch(error => {
+              console.error('[Spotify] Error refreshing token:', error);
+              localStorage.removeItem('spotify_access_token');
+              localStorage.removeItem('spotify_refresh_token');
+              localStorage.removeItem('spotify_connected');
+            });
+        } else {
+          console.error('[Spotify] No refresh token found');
+          localStorage.removeItem('spotify_access_token');
+          localStorage.removeItem('spotify_connected');
         }
-      });
-      
-      spotifyPlayer.connect();
+        return;
+      }
+
+      initializeSpotifyPlayer(token);
     }
   }, [spotifyReady]);
+
+  const initializeSpotifyPlayer = (token) => {
+    spotifyPlayer = new window.Spotify.Player({
+      name: 'Harmony Web Player',
+      getOAuthToken: cb => { cb(token); },
+      volume: 0.8
+    });
+
+    spotifyPlayer.addListener('ready', ({ device_id }) => {
+      console.log('[Spotify SDK] Player ready with device_id', device_id);
+      spotifyPlayerRef.current = spotifyPlayer;
+      setSpotifyDeviceId(device_id);
+    });
+
+    spotifyPlayer.addListener('not_ready', ({ device_id }) => {
+      console.log('[Spotify SDK] Player not ready', device_id);
+    });
+
+    spotifyPlayer.addListener('initialization_error', e => console.error('[Spotify SDK] Init error', e));
+    spotifyPlayer.addListener('authentication_error', e => {
+      console.error('[Spotify SDK] Auth error', e);
+      // Try to refresh the token
+      const refreshToken = localStorage.getItem('spotify_refresh_token');
+      if (refreshToken) {
+        fetch(`${window.location.origin}/api/refresh_token?refresh_token=${refreshToken}`)
+          .then(response => response.json())
+          .then(data => {
+            if (data.access_token) {
+              localStorage.setItem('spotify_access_token', data.access_token);
+              localStorage.setItem('spotify_token_expiry', (Date.now() + 3600000).toString());
+              spotifyPlayer.connect();
+            }
+          })
+          .catch(error => console.error('[Spotify] Error refreshing token:', error));
+      }
+    });
+    spotifyPlayer.addListener('account_error', e => console.error('[Spotify SDK] Account error', e));
+    spotifyPlayer.addListener('playback_error', e => console.error('[Spotify SDK] Playback error', e));
+    
+    // Add playback state listeners
+    spotifyPlayer.addListener('player_state_changed', state => {
+      if (state) {
+        console.log('[Spotify SDK] Player state changed:', state);
+        setIsPlaying(!state.paused);
+        // Update current track if it's different
+        if (state.track_window.current_track) {
+          const currentTrack = {
+            ...state.track_window.current_track,
+            title: state.track_window.current_track.name,
+            artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
+            source: 'spotify'
+          };
+          setCurrentTrack(currentTrack);
+        }
+      }
+    });
+    
+    spotifyPlayer.connect();
+  };
 
   // Load and initialize MusicKit JS
   useEffect(() => {
@@ -596,12 +694,12 @@ export default function Session() {
 
   // Add progress state
   const [progress, setProgress] = useState(0);
-  const [trackDuration, setTrackDuration] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   // Handle progress updates from MusicPlayer
-  const handleProgressUpdate = (position, duration) => {
-    setProgress(Math.floor(position / 1000)); // Convert to seconds
-    setTrackDuration(Math.floor(duration / 1000));
+  const handleProgressUpdate = (position, totalDuration) => {
+    setProgress(position);
+    setDuration(totalDuration);
   };
 
   // Handle seeking
@@ -628,6 +726,11 @@ export default function Session() {
       music.seekToTime(position / 1000); // Convert to seconds
     }
   };
+
+  // Rate limiting for queue updates
+  const QUEUE_UPDATE_INTERVAL = 1000; // 1 second between queue updates
+  const [lastQueueUpdate, setLastQueueUpdate] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
   if (isInitializing) {
     return (
@@ -972,8 +1075,14 @@ export default function Session() {
           spotifyPlayerRef={spotifyPlayerRef}
           appleMusicUserToken={appleMusicUserToken}
           onProgressUpdate={handleProgressUpdate}
+          progress={progress}
+          duration={duration}
         />
       )}
+      <Search
+        onAddTrack={handleAddToQueue}
+        isSpotifyConnected={hasSpotify}
+      />
     </Box>
   );
 } 
