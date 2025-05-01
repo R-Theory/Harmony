@@ -297,21 +297,49 @@ const MusicPlayer = ({
 
       // Add playback state listener for progress updates
       const handlePlayerStateChanged = (state) => {
+        if (!state) return;
+
         debug.log('Player state changed', {
           position: state.position,
           duration: state.duration,
-          isPlaying: !state.paused
+          isPlaying: !state.paused,
+          track: state.track_window?.current_track
         });
         
-        if (state && onProgressUpdate) {
+        if (onProgressUpdate) {
           onProgressUpdate(state.position, state.duration);
         }
       };
 
       player.addListener('player_state_changed', handlePlayerStateChanged);
 
+      // Add error listeners
+      player.addListener('initialization_error', (error) => {
+        debug.logError(error, 'Spotify player initialization error');
+        setError('Failed to initialize Spotify player');
+      });
+
+      player.addListener('authentication_error', (error) => {
+        debug.logError(error, 'Spotify authentication error');
+        setError('Spotify authentication failed');
+      });
+
+      player.addListener('account_error', (error) => {
+        debug.logError(error, 'Spotify account error');
+        setError('Spotify account error');
+      });
+
+      player.addListener('playback_error', (error) => {
+        debug.logError(error, 'Spotify playback error');
+        setError('Playback error occurred');
+      });
+
       return () => {
         player.removeListener('player_state_changed', handlePlayerStateChanged);
+        player.removeListener('initialization_error');
+        player.removeListener('authentication_error');
+        player.removeListener('account_error');
+        player.removeListener('playback_error');
       };
     }
   }, [track, isPlaying, volume, spotifyPlayerRef, onProgressUpdate]);

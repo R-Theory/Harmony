@@ -706,24 +706,34 @@ export default function Session() {
   const handleSeek = async (position) => {
     if (!currentTrack || !selectedPlaybackDevice) return;
 
-    if (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) {
-      const token = localStorage.getItem('spotify_access_token');
-      if (!token) return;
+    try {
+      if (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) {
+        const token = localStorage.getItem('spotify_access_token');
+        if (!token) {
+          console.error('[Playback] No Spotify token available for seeking');
+          return;
+        }
 
-      try {
-        await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${position}`, {
+        const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${position}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
-      } catch (e) {
-        console.error('[Playback] Error seeking:', e);
+
+        if (!response.ok) {
+          throw new Error('Failed to seek in Spotify playback');
+        }
+
+        setProgress(position);
+      } else if (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic) {
+        const music = window.MusicKit.getInstance();
+        await music.seekToTime(position / 1000); // Convert to seconds
+        setProgress(position);
       }
-    } else if (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic) {
-      const music = window.MusicKit.getInstance();
-      music.seekToTime(position / 1000); // Convert to seconds
+    } catch (error) {
+      console.error('[Playback] Error seeking:', error);
     }
   };
 
@@ -1061,6 +1071,8 @@ export default function Session() {
         volume={volume}
         onVolumeChange={handleVolumeChange}
         onSeek={handleSeek}
+        progress={progress}
+        duration={duration}
       />
       {/* Unified MusicPlayer for actual playback */}
       {isHost && (

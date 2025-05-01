@@ -24,20 +24,28 @@ const PlayerBar = ({
   onSkipPrevious,
   volume,
   onVolumeChange,
-  onSeek
+  onSeek,
+  progress,
+  duration
 }) => {
   const theme = useTheme();
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [localProgress, setLocalProgress] = useState(0);
   const progressInterval = useRef(null);
+
+  // Update local progress when not seeking
+  useEffect(() => {
+    if (!isSeeking) {
+      setLocalProgress(progress);
+    }
+  }, [progress, isSeeking]);
 
   // Update progress every second when playing
   useEffect(() => {
     if (isPlaying && currentTrack && !isSeeking) {
       progressInterval.current = setInterval(() => {
-        setProgress(prev => {
-          const newProgress = prev + 1;
+        setLocalProgress(prev => {
+          const newProgress = prev + 1000; // Add 1 second in milliseconds
           if (newProgress >= duration) {
             clearInterval(progressInterval.current);
             onSkipNext(); // Automatically skip to next track when current one ends
@@ -55,25 +63,15 @@ const PlayerBar = ({
     };
   }, [isPlaying, currentTrack, duration, onSkipNext, isSeeking]);
 
-  // Reset progress and update duration when track changes
-  useEffect(() => {
-    if (currentTrack) {
-      setDuration(Math.floor(currentTrack.duration_ms / 1000));
-      setProgress(0);
-    }
-  }, [currentTrack]);
-
-  const formatTime = (seconds) => {
+  const formatTime = (milliseconds) => {
+    const seconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   const handleProgressChange = (event, newValue) => {
-    setProgress(newValue);
-    if (onSeek) {
-      onSeek(newValue * 1000); // Convert to milliseconds
-    }
+    setLocalProgress(newValue);
   };
 
   const handleSeekStart = () => {
@@ -81,8 +79,11 @@ const PlayerBar = ({
     clearInterval(progressInterval.current);
   };
 
-  const handleSeekEnd = () => {
+  const handleSeekEnd = (event, newValue) => {
     setIsSeeking(false);
+    if (onSeek) {
+      onSeek(newValue);
+    }
   };
 
   return (
@@ -136,10 +137,10 @@ const PlayerBar = ({
         {/* Progress Bar */}
         <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            {formatTime(progress)}
+            {formatTime(localProgress)}
           </Typography>
           <Slider
-            value={progress}
+            value={localProgress}
             max={duration}
             onChange={handleProgressChange}
             onChangeCommitted={handleSeekEnd}
@@ -174,7 +175,9 @@ PlayerBar.propTypes = {
   onSkipPrevious: PropTypes.func,
   volume: PropTypes.number.isRequired,
   onVolumeChange: PropTypes.func,
-  onSeek: PropTypes.func
+  onSeek: PropTypes.func,
+  progress: PropTypes.number,
+  duration: PropTypes.number
 };
 
 export default PlayerBar; 

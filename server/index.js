@@ -5,6 +5,8 @@ import SpotifyWebApi from 'spotify-web-api-node';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
 
 // Import queue API routes
 import queueRoutes from './api/queue.js';
@@ -53,7 +55,7 @@ const getAllowedOrigins = () => {
 
 const allowedOrigins = getAllowedOrigins();
 
-// Set up Socket.IO
+// Set up Socket.IO with enhanced configuration
 const io = new Server(httpServer, {
   path: '/socket.io',
   cors: {
@@ -65,7 +67,15 @@ const io = new Server(httpServer, {
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
-  connectTimeout: 45000
+  connectTimeout: 45000,
+  allowEIO3: true, // Allow Engine.IO v3 clients
+  allowUpgrades: true,
+  cookie: {
+    name: 'io',
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax'
+  }
 });
 
 // Add more detailed Socket.IO middleware for logging and error handling
