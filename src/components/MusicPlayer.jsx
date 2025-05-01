@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { FaPlay, FaPause, FaStepForward, FaStepBackward, FaVolumeUp, FaVolumeMute } from 'react-icons/fa';
 import DebugLogger from '../utils/debug';
 
 const debug = new DebugLogger('MusicPlayer');
