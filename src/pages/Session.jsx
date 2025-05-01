@@ -307,30 +307,42 @@ export default function Session() {
 
   // Playback control handlers
   const handlePlayPause = () => {
-    console.log('[DEBUG] handlePlayPause called');
-    console.log('[DEBUG] isPlaying before toggle:', isPlaying);
-    console.log('[DEBUG] currentTrack:', currentTrack);
-    console.log('[DEBUG] selectedPlaybackDevice:', selectedPlaybackDevice);
-    setIsPlaying((prev) => !prev);
-    setTimeout(() => {
-      console.log('[DEBUG] isPlaying after toggle:', !isPlaying);
-    }, 0);
+    if (!currentTrack) return;
+    setIsPlaying(prev => !prev);
   };
+
   const handleSkipNext = () => {
-    // For now, just log and set next track as current
-    if (queue && queue.length > 1) {
-      // Remove the first track and update currentTrack
-      const newQueue = queue.slice(1);
-      setQueue(newQueue);
-      setCurrentTrack(newQueue[0] || null);
+    if (!queue || queue.length <= 1) return;
+    
+    // Remove the first track and update currentTrack
+    const newQueue = queue.slice(1);
+    setQueue(newQueue);
+    
+    if (newQueue.length > 0) {
+      const nextTrack = newQueue[0];
+      const mappedTrack = {
+        ...nextTrack,
+        title: nextTrack.name || nextTrack.title,
+        artist: nextTrack.artists
+          ? (Array.isArray(nextTrack.artists)
+              ? nextTrack.artists.map(a => a.name).join(', ')
+              : nextTrack.artists)
+          : nextTrack.artist || ''
+      };
+      setCurrentTrack(mappedTrack);
       setIsPlaying(true);
-      // Optionally, emit skip event to backend here
+    } else {
+      setCurrentTrack(null);
+      setIsPlaying(false);
     }
-    console.log('[PlayerBar] Skip to next track');
   };
+
   const handleSkipPrevious = () => {
-    // For now, just log (implement real logic if you keep track history)
-    console.log('[PlayerBar] Skip to previous track');
+    // For now, just restart the current track
+    if (currentTrack) {
+      setProgress(0);
+      setIsPlaying(true);
+    }
   };
 
   // Helper to get all devices (host + guests)
@@ -579,6 +591,41 @@ export default function Session() {
       showQueueNotification('Removed track from session queue');
     } catch (error) {
       showQueueNotification(error.message, 'error');
+    }
+  };
+
+  // Add progress state
+  const [progress, setProgress] = useState(0);
+  const [trackDuration, setTrackDuration] = useState(0);
+
+  // Handle progress updates from MusicPlayer
+  const handleProgressUpdate = (position, duration) => {
+    setProgress(Math.floor(position / 1000)); // Convert to seconds
+    setTrackDuration(Math.floor(duration / 1000));
+  };
+
+  // Handle seeking
+  const handleSeek = async (position) => {
+    if (!currentTrack || !selectedPlaybackDevice) return;
+
+    if (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) {
+      const token = localStorage.getItem('spotify_access_token');
+      if (!token) return;
+
+      try {
+        await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${position}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (e) {
+        console.error('[Playback] Error seeking:', e);
+      }
+    } else if (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic) {
+      const music = window.MusicKit.getInstance();
+      music.seekToTime(position / 1000); // Convert to seconds
     }
   };
 
@@ -910,6 +957,7 @@ export default function Session() {
         onSkipPrevious={handleSkipPrevious}
         volume={volume}
         onVolumeChange={handleVolumeChange}
+        onSeek={handleSeek}
       />
       {/* Unified MusicPlayer for actual playback */}
       {isHost && (
@@ -923,6 +971,7 @@ export default function Session() {
           onVolumeChange={handleVolumeChange}
           spotifyPlayerRef={spotifyPlayerRef}
           appleMusicUserToken={appleMusicUserToken}
+          onProgressUpdate={handleProgressUpdate}
         />
       )}
     </Box>

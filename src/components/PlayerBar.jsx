@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Paper,
   IconButton,
@@ -23,28 +23,39 @@ const PlayerBar = ({
   onSkipNext,
   onSkipPrevious,
   volume,
-  onVolumeChange
+  onVolumeChange,
+  onSeek
 }) => {
   const theme = useTheme();
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const progressInterval = useRef(null);
 
+  // Update progress every second when playing
   useEffect(() => {
-    let interval;
-    if (isPlaying && currentTrack) {
-      interval = setInterval(() => {
+    if (isPlaying && currentTrack && !isSeeking) {
+      progressInterval.current = setInterval(() => {
         setProgress(prev => {
-          if (prev >= duration) {
-            clearInterval(interval);
+          const newProgress = prev + 1;
+          if (newProgress >= duration) {
+            clearInterval(progressInterval.current);
+            onSkipNext(); // Automatically skip to next track when current one ends
             return 0;
           }
-          return prev + 1;
+          return newProgress;
         });
       }, 1000);
+    } else {
+      clearInterval(progressInterval.current);
     }
-    return () => clearInterval(interval);
-  }, [isPlaying, currentTrack, duration]);
 
+    return () => {
+      clearInterval(progressInterval.current);
+    };
+  }, [isPlaying, currentTrack, duration, onSkipNext, isSeeking]);
+
+  // Reset progress and update duration when track changes
   useEffect(() => {
     if (currentTrack) {
       setDuration(Math.floor(currentTrack.duration_ms / 1000));
@@ -60,7 +71,18 @@ const PlayerBar = ({
 
   const handleProgressChange = (event, newValue) => {
     setProgress(newValue);
-    // TODO: Implement seeking in Spotify Web Playback SDK
+    if (onSeek) {
+      onSeek(newValue * 1000); // Convert to milliseconds
+    }
+  };
+
+  const handleSeekStart = () => {
+    setIsSeeking(true);
+    clearInterval(progressInterval.current);
+  };
+
+  const handleSeekEnd = () => {
+    setIsSeeking(false);
   };
 
   return (
@@ -89,13 +111,24 @@ const PlayerBar = ({
 
         {/* Playback Controls */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton size="small" onClick={onSkipPrevious}>
+          <IconButton 
+            size="small" 
+            onClick={onSkipPrevious}
+            disabled={!currentTrack}
+          >
             <SkipPrevious />
           </IconButton>
-          <IconButton onClick={onPlayPause}>
+          <IconButton 
+            onClick={onPlayPause}
+            disabled={!currentTrack}
+          >
             {isPlaying ? <Pause /> : <PlayArrow />}
           </IconButton>
-          <IconButton size="small" onClick={onSkipNext}>
+          <IconButton 
+            size="small" 
+            onClick={onSkipNext}
+            disabled={!currentTrack}
+          >
             <SkipNext />
           </IconButton>
         </Box>
@@ -109,7 +142,10 @@ const PlayerBar = ({
             value={progress}
             max={duration}
             onChange={handleProgressChange}
+            onChangeCommitted={handleSeekEnd}
+            onChangeStart={handleSeekStart}
             sx={{ mx: 2 }}
+            disabled={!currentTrack}
           />
           <Typography variant="body2" color="text.secondary">
             {formatTime(duration)}
@@ -121,9 +157,7 @@ const PlayerBar = ({
           <VolumeUp />
           <Slider
             value={volume}
-            onChange={(e, newValue) => onVolumeChange(newValue)}
-            min={0}
-            max={100}
+            onChange={onVolumeChange}
             sx={{ width: 100 }}
           />
         </Box>
@@ -135,11 +169,12 @@ const PlayerBar = ({
 PlayerBar.propTypes = {
   currentTrack: PropTypes.object,
   isPlaying: PropTypes.bool.isRequired,
-  onPlayPause: PropTypes.func.isRequired,
-  onSkipNext: PropTypes.func.isRequired,
-  onSkipPrevious: PropTypes.func.isRequired,
+  onPlayPause: PropTypes.func,
+  onSkipNext: PropTypes.func,
+  onSkipPrevious: PropTypes.func,
   volume: PropTypes.number.isRequired,
-  onVolumeChange: PropTypes.func.isRequired,
+  onVolumeChange: PropTypes.func,
+  onSeek: PropTypes.func
 };
 
 export default PlayerBar; 

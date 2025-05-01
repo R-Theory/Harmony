@@ -12,6 +12,7 @@ import PropTypes from 'prop-types';
  * - onSkipPrevious: function
  * - volume: number (0-100)
  * - onVolumeChange: function
+ * - onProgressUpdate: function(position, duration) - Callback for progress updates
  */
 const MusicPlayer = ({
   track,
@@ -22,7 +23,8 @@ const MusicPlayer = ({
   volume,
   onVolumeChange,
   spotifyPlayerRef,
-  appleMusicUserToken
+  appleMusicUserToken,
+  onProgressUpdate
 }) => {
   const musicKitRef = useRef(null);
   const [lastApiCall, setLastApiCall] = useState(0);
@@ -122,8 +124,22 @@ const MusicPlayer = ({
 
         transferPlayback();
       }
+
+      // Add playback state listener for progress updates
+      const handlePlayerStateChanged = (state) => {
+        if (state && onProgressUpdate) {
+          onProgressUpdate(state.position, state.duration);
+        }
+      };
+
+      player.addListener('player_state_changed', handlePlayerStateChanged);
+
+      // Cleanup
+      return () => {
+        player.removeListener('player_state_changed', handlePlayerStateChanged);
+      };
     }
-  }, [track, isPlaying, volume, spotifyPlayerRef]);
+  }, [track, isPlaying, volume, spotifyPlayerRef, onProgressUpdate]);
 
   // Handle Apple Music playback
   useEffect(() => {
@@ -141,8 +157,22 @@ const MusicPlayer = ({
         music.pause();
       }
       music.volume = volume / 100;
+
+      // Add playback time observer for progress updates
+      const handlePlaybackTimeDidChange = (event) => {
+        if (onProgressUpdate) {
+          onProgressUpdate(event.currentPlaybackTime * 1000, event.duration * 1000);
+        }
+      };
+
+      music.addEventListener('playbackTimeDidChange', handlePlaybackTimeDidChange);
+
+      // Cleanup
+      return () => {
+        music.removeEventListener('playbackTimeDidChange', handlePlaybackTimeDidChange);
+      };
     }
-  }, [track, isPlaying, volume, appleMusicUserToken]);
+  }, [track, isPlaying, volume, appleMusicUserToken, onProgressUpdate]);
 
   // Unified controls (for UI, not actual playback logic)
   return null; // This component does not render UI directly
@@ -157,7 +187,8 @@ MusicPlayer.propTypes = {
   volume: PropTypes.number.isRequired,
   onVolumeChange: PropTypes.func,
   spotifyPlayerRef: PropTypes.object,
-  appleMusicUserToken: PropTypes.string
+  appleMusicUserToken: PropTypes.string,
+  onProgressUpdate: PropTypes.func
 };
 
 export default MusicPlayer; 
