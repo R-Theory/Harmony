@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 
 /**
@@ -25,6 +25,45 @@ const MusicPlayer = ({
   appleMusicUserToken
 }) => {
   const musicKitRef = useRef(null);
+  const [lastApiCall, setLastApiCall] = useState(0);
+  const [retryAfter, setRetryAfter] = useState(0);
+
+  // Helper function to handle rate limiting
+  const handleRateLimit = async (response) => {
+    if (response.status === 429) {
+      const retryAfter = parseInt(response.headers.get('Retry-After')) || 5;
+      setRetryAfter(retryAfter);
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      setRetryAfter(0);
+      return true;
+    }
+    return false;
+  };
+
+  // Helper function to make API calls with rate limiting
+  const makeApiCall = async (url, options) => {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCall;
+    
+    // Wait if we're being rate limited
+    if (retryAfter > 0) {
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+    }
+    
+    // Ensure minimum time between calls
+    if (timeSinceLastCall < 1000) {
+      await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLastCall));
+    }
+
+    const response = await fetch(url, options);
+    setLastApiCall(Date.now());
+
+    if (await handleRateLimit(response)) {
+      return makeApiCall(url, options); // Retry the call
+    }
+
+    return response;
+  };
 
   // Handle Spotify playback
   useEffect(() => {
@@ -45,30 +84,43 @@ const MusicPlayer = ({
       
       // Handle track changes
       if (track.uri) {
-        // Transfer playback to web player and play the track
-        fetch('https://api.spotify.com/v1/me/player', {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ device_ids: [player._options.id], play: true })
-        }).then(() => {
-          fetch(`https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ uris: [track.uri] })
-          }).catch(e => {
-            console.error('[Playback] Error playing track:', e);
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
+        // Batch the API calls
+        const transferPlayback = async () => {
+          try {
+            const response = await makeApiCall('https://api.spotify.com/v1/me/player', {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify({ device_ids: [player._options.id], play: true })
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to transfer playback');
+            }
+
+            const playResponse = await makeApiCall(`https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify({ uris: [track.uri] })
+            });
+
+            if (!playResponse.ok) {
+              throw new Error('Failed to play track');
+            }
+          } catch (e) {
+            console.error('[Playback] Error:', e);
             // Try to reconnect the player if there's an error
             if (spotifyPlayerRef.current) {
               spotifyPlayerRef.current.connect();
             }
-          });
-        }).catch(e => console.error('[Playback] Error transferring playback:', e));
+          }
+        };
+
+        transferPlayback();
       }
     }
   }, [track, isPlaying, volume, spotifyPlayerRef]);
