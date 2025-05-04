@@ -592,14 +592,16 @@ export default function Session() {
 
   // Update the playback effect to use the stored device ID
   useEffect(() => {
-    console.log('[DEBUG] Playback effect triggered');
-    console.log('[DEBUG] currentTrack:', currentTrack);
-    console.log('[DEBUG] selectedPlaybackDevice:', selectedPlaybackDevice);
-    console.log('[DEBUG] isPlaying:', isPlaying);
-    console.log('[DEBUG] spotifyDeviceId:', spotifyDeviceId);
+    debug.log('[DEBUG] Playback effect triggered');
+    debug.log('[DEBUG] currentTrack:', currentTrack);
+    debug.log('[DEBUG] selectedPlaybackDevice:', selectedPlaybackDevice);
+    debug.log('[DEBUG] isPlaying:', isPlaying);
+    debug.log('[DEBUG] spotifyDeviceId:', spotifyDeviceId);
+    debug.log('[DEBUG] progress:', progress);
+    debug.log('[DEBUG] duration:', duration);
 
     if (!currentTrack || !selectedPlaybackDevice) {
-      console.log('[Playback] No current track or selected device:', { currentTrack, selectedPlaybackDevice });
+      debug.log('[Playback] No current track or selected device:', { currentTrack, selectedPlaybackDevice });
       return;
     }
 
@@ -607,16 +609,16 @@ export default function Session() {
       (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) ||
       (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic);
     
-    console.log('[Playback] Can play track:', { canPlay, trackSource: currentTrack.source, deviceCapabilities: selectedPlaybackDevice });
+    debug.log('[Playback] Can play track:', { canPlay, trackSource: currentTrack.source, deviceCapabilities: selectedPlaybackDevice });
     
     if (canPlay) {
       if (selectedPlaybackDevice.id === userId) {
-        console.log('[Playback] This device will play the track');
+        debug.log('[Playback] This device will play the track');
         if (currentTrack.source === 'spotify' && spotifyDeviceId) {
           // Play Spotify track using SDK
           const token = localStorage.getItem('spotify_access_token');
           if (window.Spotify && spotifyPlayerRef.current && token) {
-            console.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
+            debug.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
             // Transfer playback to web player
             fetch('https://api.spotify.com/v1/me/player', {
               method: 'PUT',
@@ -626,7 +628,7 @@ export default function Session() {
               },
               body: JSON.stringify({ device_ids: [spotifyDeviceId], play: true })
             }).then(() => {
-              console.log('[Playback] Successfully transferred playback to web player');
+              debug.log('[Playback] Successfully transferred playback to web player');
               // Play the track
               fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
                 method: 'PUT',
@@ -636,17 +638,28 @@ export default function Session() {
                 },
                 body: JSON.stringify({ uris: [currentTrack.uri] })
               }).then(() => {
-                console.log('[Playback] Successfully started playing Spotify track');
+                debug.log('[Playback] Successfully started playing Spotify track');
+                // Start progress updates
+                const progressInterval = setInterval(() => {
+                  if (spotifyPlayerRef.current) {
+                    spotifyPlayerRef.current.getCurrentState().then(state => {
+                      if (state) {
+                        handleProgressUpdate(state.position, state.duration);
+                      }
+                    });
+                  }
+                }, 1000);
+                return () => clearInterval(progressInterval);
               }).catch(e => {
-                console.error('[Playback] Error playing track:', e);
+                debug.logError('[Playback] Error playing track:', e);
                 // Try to reconnect the player if there's an error
                 if (spotifyPlayerRef.current) {
                   spotifyPlayerRef.current.connect();
                 }
               });
-            }).catch(e => console.error('[Playback] Error transferring playback:', e));
+            }).catch(e => debug.logError('[Playback] Error transferring playback:', e));
           } else {
-            console.warn('[Playback] Spotify SDK not ready or no token:', {
+            debug.log('[Playback] Spotify SDK not ready or no token:', {
               hasSpotifySDK: !!window.Spotify,
               hasPlayerRef: !!spotifyPlayerRef.current,
               hasToken: !!token,
@@ -654,15 +667,20 @@ export default function Session() {
             });
           }
         } else if (currentTrack.source === 'appleMusic' && appleMusicUserToken) {
-          console.log('[Playback] Playing Apple Music track:', currentTrack.appleMusicId);
+          debug.log('[Playback] Playing Apple Music track:', currentTrack.appleMusicId);
           const music = window.MusicKit.getInstance();
           music.setQueue({ song: currentTrack.appleMusicId }).then(() => {
             music.play();
-            console.log('[MusicKit] Successfully started playing Apple Music track');
-          }).catch(e => console.error('[MusicKit] Error setting queue:', e));
+            debug.log('[MusicKit] Successfully started playing Apple Music track');
+            // Start progress updates
+            const progressInterval = setInterval(() => {
+              handleProgressUpdate(music.currentPlaybackTime * 1000, music.duration * 1000);
+            }, 1000);
+            return () => clearInterval(progressInterval);
+          }).catch(e => debug.logError('[MusicKit] Error setting queue:', e));
         }
       } else {
-        console.log('[Playback] Another device will play the track:', selectedPlaybackDevice);
+        debug.log('[Playback] Another device will play the track:', selectedPlaybackDevice);
       }
     } else {
       // Find a capable device
@@ -671,11 +689,11 @@ export default function Session() {
         (currentTrack.source === 'spotify' && d.hasSpotify) ||
         (currentTrack.source === 'appleMusic' && d.hasAppleMusic)
       );
-      console.log('[Playback] Looking for capable device:', { allDevices, capableDevice });
+      debug.log('[Playback] Looking for capable device:', { allDevices, capableDevice });
       if (capableDevice) {
         if (capableDevice.id === userId) {
           // This device should stream audio to the selected device
-          console.log('[Streaming] This device will stream audio to', selectedPlaybackDevice);
+          debug.log('[Streaming] This device will stream audio to', selectedPlaybackDevice);
           startWebRTCStreaming(selectedPlaybackDevice.id);
         } else {
           // Request the capable device to start streaming
@@ -685,14 +703,14 @@ export default function Session() {
               fromUserId: capableDevice.id,
               toUserId: selectedPlaybackDevice.id
             });
-            console.log('[WebRTC] Requested device', capableDevice.id, 'to stream to', selectedPlaybackDevice.id);
+            debug.log('[WebRTC] Requested device', capableDevice.id, 'to stream to', selectedPlaybackDevice.id);
           }
         }
       } else {
-        console.warn('[Playback] No device in session can play this track:', currentTrack);
+        debug.log('[Playback] No device in session can play this track:', currentTrack);
       }
     }
-  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying, spotifyDeviceId]);
+  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying, spotifyDeviceId, progress, duration]);
 
   // Handle queue updates
   const handleQueueUpdate = (newQueue) => {

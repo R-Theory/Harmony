@@ -40,6 +40,7 @@ const PlayerBar = ({
 
   // Update local progress when not seeking
   useEffect(() => {
+    debug.log('Progress update received', { progress, isSeeking });
     if (!isSeeking) {
       setLocalProgress(progress);
     }
@@ -47,11 +48,13 @@ const PlayerBar = ({
 
   // Update progress every second when playing
   useEffect(() => {
+    debug.log('Playback state changed', { isPlaying, currentTrack, isSeeking });
     if (isPlaying && currentTrack && !isSeeking) {
       progressInterval.current = setInterval(() => {
         setLocalProgress(prev => {
           const newProgress = prev + 1000; // Add 1 second in milliseconds
           if (newProgress >= duration) {
+            debug.log('Track ended, skipping to next');
             clearInterval(progressInterval.current);
             onSkipNext(); // Automatically skip to next track when current one ends
             return 0;
@@ -81,6 +84,7 @@ const PlayerBar = ({
     }
     
     setLastSeekTime(now);
+    debug.log('Seeking to position', { newValue });
     onSeek(newValue);
   };
 
@@ -97,11 +101,13 @@ const PlayerBar = ({
     }
     
     setLastVolumeChange(now);
+    debug.log('Volume changed', { newValue });
     onVolumeChange(newValue);
   };
 
   // Update progress bar smoothly
   useEffect(() => {
+    debug.log('Progress bar effect triggered', { isPlaying, currentTrack, duration });
     if (!isPlaying || !currentTrack) return;
     
     const interval = setInterval(() => {
