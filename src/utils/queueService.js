@@ -92,9 +92,6 @@ class QueueService {
 
     this.socket.on('error', (error) => {
       console.error('Socket error:', error);
-      if (this.onError) {
-        this.onError('Error in queue service: ' + error.message);
-      }
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -142,6 +139,27 @@ class QueueService {
           this.socket.connect();
         }
       }, 10000);
+    });
+
+    // Add more detailed logging
+    this.socket.on('connect_timeout', (timeout) => {
+      console.error('Socket connection timeout:', timeout);
+    });
+
+    this.socket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('Reconnection attempt:', attemptNumber);
+    });
+
+    this.socket.on('reconnecting', (attemptNumber) => {
+      console.log('Reconnecting to queue service, attempt:', attemptNumber);
+    });
+
+    this.socket.on('ping', () => {
+      console.log('Socket ping');
+    });
+
+    this.socket.on('pong', (latency) => {
+      console.log('Socket pong, latency:', latency);
     });
   }
 

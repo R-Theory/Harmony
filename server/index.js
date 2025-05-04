@@ -161,6 +161,11 @@ app.use((req, res, next) => {
 
 // Add Socket.IO route handler
 app.use('/api/socket.io', (req, res, next) => {
+  console.log('Socket.IO request received:', {
+    method: req.method,
+    url: req.url,
+    headers: req.headers
+  });
   res.status(200).end();
 });
 
