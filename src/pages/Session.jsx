@@ -50,6 +50,10 @@ import socket from '../../client/src/services/socket';
 import MusicPlayer from '../components/MusicPlayer';
 import Search from '../components/Search';
 import DebugLogger from '../utils/debug';
+import DeviceSelectionDialog from '../components/DeviceSelectionDialog';
+import StreamingBanner from '../components/StreamingBanner';
+import SessionInfoPanel from '../components/SessionInfoPanel';
+import PlayerContainer from '../components/PlayerContainer';
 
 const debug = new DebugLogger('Session');
 
@@ -849,47 +853,16 @@ export default function Session() {
         )}
       </Box>
       {/* Device Selection Dialog */}
-      <Dialog open={showDeviceMenu} onClose={() => setShowDeviceMenu(false)}>
-        <DialogTitle>Select Playback Device</DialogTitle>
-        <DialogContent>
-          <List>
-            {getAllDevices().map((device) => (
-              <ListItem
-                button
-                key={device.id}
-                selected={selectedPlaybackDevice?.id === device.id}
-                onClick={() => {
-                  setSelectedPlaybackDevice(device);
-                  setShowDeviceMenu(false);
-                }}
-              >
-                <ListItemAvatar>
-                  <Avatar>
-                    <ComputerIcon />
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={device.name}
-                  secondary={
-                    [
-                      device.isHost ? 'Host' : 'Guest',
-                      device.hasSpotify ? 'Spotify' : null,
-                      device.hasAppleMusic ? 'Apple Music' : null
-                    ].filter(Boolean).join(' • ')
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
-        </DialogContent>
-      </Dialog>
+      <DeviceSelectionDialog
+        open={showDeviceMenu}
+        onClose={() => setShowDeviceMenu(false)}
+        devices={getAllDevices()}
+        selectedDevice={selectedPlaybackDevice}
+        onSelectDevice={setSelectedPlaybackDevice}
+      />
       {/* Streaming UI Banner */}
       {isStreaming && (
-        <Box sx={{ p: 2, mb: 2, background: '#e3f2fd', color: '#1976d2', borderRadius: 2, textAlign: 'center' }}>
-          <Typography variant="h6">
-            {isHost ? 'Receiving audio stream from guest...' : 'Streaming audio to host...'}
-          </Typography>
-        </Box>
+        <StreamingBanner isHost={isHost} />
       )}
       <Paper elevation={3} sx={{ p: 3 }}>
         <Grid container spacing={3}>
@@ -984,14 +957,7 @@ export default function Session() {
         </Tabs>
 
         <TabPanel value={tabValue} index={0}>
-          <Typography variant="body1">
-            This is a collaborative listening session. All participants will hear the same music.
-          </Typography>
-          <Typography variant="body1" sx={{ mt: 2 }}>
-            {isHost 
-              ? "As the host, you control the music playback. Guests will hear what you play." 
-              : "As a guest, you'll hear the music that the host plays."}
-          </Typography>
+          <SessionInfoPanel isHost={isHost} />
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
@@ -1062,35 +1028,19 @@ export default function Session() {
       </Dialog>
       {/* PlayerBar at the bottom */}
       {console.log('[DEBUG] Rendering PlayerBar with currentTrack:', currentTrack)}
-      <PlayerBar
+      <PlayerContainer
         currentTrack={currentTrack}
         isPlaying={isPlaying}
-        onPlayPause={handlePlayPause}
+        setIsPlaying={setIsPlaying}
         onSkipNext={handleSkipNext}
         onSkipPrevious={handleSkipPrevious}
         volume={volume}
-        onVolumeChange={handleVolumeChange}
-        onSeek={handleSeek}
-        progress={progress}
-        duration={duration}
+        setVolume={setVolume}
+        spotifyPlayerRef={spotifyPlayerRef}
+        appleMusicUserToken={appleMusicUserToken}
+        hasSpotify={hasSpotify}
+        hasAppleMusic={hasAppleMusic}
       />
-      {/* Unified MusicPlayer for actual playback */}
-      {isHost && (
-        <MusicPlayer
-          track={currentTrack}
-          isPlaying={isPlaying}
-          onPlayPause={handlePlayPause}
-          onSkipNext={handleSkipNext}
-          onSkipPrevious={handleSkipPrevious}
-          volume={volume}
-          onVolumeChange={handleVolumeChange}
-          spotifyPlayerRef={spotifyPlayerRef}
-          appleMusicUserToken={appleMusicUserToken}
-          onProgressUpdate={handleProgressUpdate}
-          progress={progress}
-          duration={duration}
-        />
-      )}
       <Search
         onAddTrack={handleAddToQueue}
         isSpotifyConnected={hasSpotify}

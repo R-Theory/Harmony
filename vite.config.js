@@ -49,6 +49,7 @@ export default defineConfig({
         assetFileNames: 'assets/[name]-[hash].[ext]'
       },
     },
+    minify: false,
   },
   define: {
     'process.env': {},
