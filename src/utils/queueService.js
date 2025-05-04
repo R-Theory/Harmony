@@ -25,21 +25,25 @@ class QueueService {
     // Determine the Socket.IO server URL
     const socketUrl = isLocalhost 
       ? 'http://localhost:3001'
-      : window.location.origin;
+      : 'https://harmony-vert.vercel.app';
     
     console.log('Connecting to Socket.IO server at:', socketUrl);
     
     // Update Socket.IO configuration
     this.socket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/socket.io',  // Use the standard Socket.IO path
-      forceNew: true
+      path: '/socket.io',
+      forceNew: true,
+      upgrade: true,
+      rememberUpgrade: true,
+      rejectUnauthorized: false // For development only, remove in production
     });
 
     // Set up event listeners
@@ -73,17 +77,16 @@ class QueueService {
 
     this.socket.on('error', (error) => {
       console.error('Socket error:', error);
-      this.isConnected = false;
       if (this.onError) {
-        this.onError('Queue service error. Please try refreshing the page.');
+        this.onError('Error in queue service: ' + error.message);
       }
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log('Disconnected from queue service:', reason);
       this.isConnected = false;
-      if (reason === 'io server disconnect' || reason === 'io client disconnect') {
-        // Server initiated disconnect, try to reconnect
+      if (reason === 'io server disconnect') {
+        // The server has forcefully disconnected the socket
         this.socket.connect();
       }
     });

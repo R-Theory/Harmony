@@ -57,25 +57,16 @@ const allowedOrigins = getAllowedOrigins();
 
 // Set up Socket.IO with enhanced configuration
 const io = new Server(httpServer, {
-  path: '/socket.io',
   cors: {
-    origin: allowedOrigins,
+    origin: getAllowedOrigins(),
     methods: ['GET', 'POST'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+    credentials: true
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
+  allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000,
-  connectTimeout: 45000,
-  allowEIO3: true, // Allow Engine.IO v3 clients
-  allowUpgrades: true,
-  cookie: {
-    name: 'io',
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax'
-  }
+  cookie: false
 });
 
 // Add more detailed Socket.IO middleware for logging and error handling
@@ -218,6 +209,19 @@ async function getSpotifyQueue(accessToken) {
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
+  socket.on('join-session', (sessionId) => {
+    console.log('Client joining session:', sessionId);
+    socket.join(sessionId);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
+  });
+
   // Join a session
   socket.on('join-session', async (sessionId) => {
     socket.join(sessionId);
@@ -311,10 +315,6 @@ io.on('connection', (socket) => {
   socket.on('webrtc-ice-candidate', ({ sessionId, candidate, to }) => {
     console.log(`[WebRTC] ICE candidate from ${socket.id} to ${to} in session ${sessionId}`);
     io.to(to).emit('webrtc-ice-candidate', { candidate });
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
   });
 });
 
