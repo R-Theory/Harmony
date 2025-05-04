@@ -71,7 +71,7 @@ const io = new Server(httpServer, {
   connectTimeout: 45000,
   upgradeTimeout: 30000,
   maxHttpBufferSize: 1e8,
-  path: '/socket.io/',
+  path: '/api/socket.io/',
   serveClient: false,
   // Add more detailed error handling
   allowUpgrades: true,
@@ -80,7 +80,7 @@ const io = new Server(httpServer, {
   }
 });
 
-// Add more detailed Socket.IO middleware for logging and error handling
+// Add Socket.IO middleware
 io.use((socket, next) => {
   console.log('Socket.IO connection attempt:', {
     id: socket.id,
@@ -101,7 +101,7 @@ io.use((socket, next) => {
   next();
 });
 
-// Add more detailed error handling for the Socket.IO server
+// Add error handling for the Socket.IO server
 io.engine.on('connection_error', (err) => {
   console.error('Socket.IO connection error:', {
     error: err.message,
@@ -157,6 +157,11 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   
   next();
+});
+
+// Add Socket.IO route handler
+app.use('/api/socket.io', (req, res, next) => {
+  res.status(200).end();
 });
 
 // Spotify API configuration

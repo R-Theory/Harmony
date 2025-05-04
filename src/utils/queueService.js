@@ -39,7 +39,7 @@ class QueueService {
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/socket.io/',
+      path: '/api/socket.io/',
       forceNew: true,
       upgrade: true,
       rememberUpgrade: true,
