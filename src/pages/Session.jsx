@@ -173,18 +173,55 @@ export default function Session() {
     setIsHost(userIsHost);
     console.log('[Session] useEffect: userIsHost:', userIsHost, 'sessionId:', sessionId);
 
-    // No need to initialize or set up listeners for setupWebRTC (not a class)
-    // All WebRTC logic is handled by startWebRTCStreaming when needed
+    // Initialize queue service
+    queueService.connect(sessionId);
+    queueService.getQueue();
+
+    // Emit device capabilities
+    if (queueService.socket) {
+      queueService.socket.emit('device-capabilities', {
+        sessionId,
+        userId,
+        hasSpotify,
+        hasAppleMusic
+      });
+    }
+
+    // Listen for device list updates
+    if (queueService.socket) {
+      queueService.socket.on('device-list', (deviceList) => {
+        setGuests(deviceList.filter(d => d.userId !== userId));
+      });
+    }
+
+    // Auto-select this device if host
+    if (userIsHost && !selectedPlaybackDevice) {
+      setSelectedPlaybackDevice({
+        id: userId,
+        name: 'This Device (You)',
+        isHost: true,
+        hasSpotify,
+        hasAppleMusic
+      });
+    }
 
     setIsInitializing(false);
 
     // Cleanup
     return () => {
+      debug.log('Cleaning up session', { sessionId });
       localStorage.removeItem('isHost');
-      console.log('[Session] Cleanup: isHost removed from localStorage.');
-      if (peerConnection) peerConnection.close();
+      queueService.disconnect();
+      setCurrentTrack(null);
+      setIsPlaying(false);
+      setProgress(0);
+      setDuration(0);
+      setQueue([]);
+      setLastQueueUpdate(0);
+      setSelectedPlaybackDevice(null);
+      console.log('[Session] Cleanup: isHost removed from localStorage and state reset.');
     };
-  }, [sessionId, navigate]);
+  }, [sessionId, navigate, userId, hasSpotify, hasAppleMusic]);
   
   // Toggle mute
   const toggleMute = () => {
@@ -318,24 +355,13 @@ export default function Session() {
           setCurrentTrack(null);
           setIsPlaying(false);
         }
-        
-        // Auto-select the host's device if none is selected
-        if (!selectedPlaybackDevice && isHost) {
-          setSelectedPlaybackDevice({
-            id: userId,
-            name: 'This Device (You)',
-            isHost: true,
-            hasSpotify,
-            hasAppleMusic
-          });
-        }
       },
       (errorMessage) => {
         debug.logError(errorMessage, 'queueService');
         setError({ message: errorMessage });
       }
     );
-  }, [queueService.socket, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice]);
+  }, [queueService.socket, currentTrack, isPlaying]);
 
   // Playback control handlers
   const handlePlayPause = () => {
