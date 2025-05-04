@@ -8,9 +8,9 @@ import {
   ListItemAvatar,
   Avatar,
   ListItemText,
-  IconButton,
-  Computer as ComputerIcon
+  IconButton
 } from '@mui/material';
+import { Computer as ComputerIcon } from '@mui/icons-material';
 import DebugLogger from '../utils/debug';
 
 const debug = new DebugLogger('DeviceSelectionDialog');
