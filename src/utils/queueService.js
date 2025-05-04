@@ -25,7 +25,7 @@ class QueueService {
     // Determine the Socket.IO server URL
     const socketUrl = isLocalhost 
       ? 'http://localhost:3001'
-      : 'https://harmony-vert.vercel.app';
+      : 'https://harmony-backend-nxqv.onrender.com';
     
     console.log('Connecting to Socket.IO server at:', socketUrl);
     
