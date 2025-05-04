@@ -252,226 +252,6 @@ const MusicPlayer = ({
         'Content-Type': 'application/json'
       };
 
-      const handlePlayPause = async () => {
-        if (isLoading) {
-          debug.log('Playback operation already in progress');
-          return;
-        }
-
-        setIsLoading(true);
-        setError(null);
-
-        const MAX_RETRIES = 3;
-        let retryCount = 0;
-        let success = false;
-
-        while (!success && retryCount < MAX_RETRIES) {
-          try {
-            debug.log(`Playback attempt ${retryCount + 1} of ${MAX_RETRIES}`);
-
-            // First verify the track exists
-            const trackResponse = await makeApiCall(
-              `https://api.spotify.com/v1/tracks/${track.uri.split(':')[2]}`,
-              {
-                method: 'GET',
-                headers
-              }
-            );
-
-            if (!trackResponse.ok) {
-              const error = await trackResponse.json();
-              throw new Error(`Track verification failed: ${error.error?.message || 'Unknown error'}`);
-            }
-
-            // Activate device with retries
-            let activated = false;
-            let deviceRetries = 3;
-            while (!activated && deviceRetries > 0) {
-              activated = await activateDevice();
-              if (!activated) {
-                debug.log(`Device activation attempt ${4 - deviceRetries} failed, retrying...`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                deviceRetries--;
-              }
-            }
-
-            if (!activated) {
-              throw new Error('Failed to activate device for playback after multiple attempts');
-            }
-
-            if (isPlaying) {
-              debug.log('Initiating playback', {
-                trackUri: track.uri,
-                deviceId: player._options.id
-              });
-
-              // Add a small delay after device activation
-              await new Promise(resolve => setTimeout(resolve, 500));
-
-              // First transfer playback to our device
-              const transferResponse = await makeApiCall(
-                'https://api.spotify.com/v1/me/player',
-                {
-                  method: 'PUT',
-                  headers,
-                  body: JSON.stringify({
-                    device_ids: [player._options.id],
-                    play: false
-                  })
-                }
-              );
-
-              if (!transferResponse.ok) {
-                const error = await transferResponse.json();
-                throw new Error(`Failed to transfer playback: ${error.error?.message || 'Unknown error'}`);
-              }
-
-              // Wait for transfer to complete
-              await new Promise(resolve => setTimeout(resolve, 1000));
-
-              // Verify device is active before starting playback
-              const devicesResponse = await makeApiCall(
-                'https://api.spotify.com/v1/me/player/devices',
-                {
-                  method: 'GET',
-                  headers
-                }
-              );
-
-              const devicesData = await devicesResponse.json();
-              const activeDevice = devicesData.devices.find(d => d.is_active);
-              
-              if (!activeDevice || activeDevice.id !== player._options.id) {
-                throw new Error('Device not active after transfer');
-              }
-
-              // Then start playback
-              const playResponse = await makeApiCall(
-                `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
-                {
-                  method: 'PUT',
-                  headers,
-                  body: JSON.stringify({ 
-                    uris: [track.uri],
-                    position_ms: 0 // Start from beginning
-                  })
-                }
-              );
-
-              if (!playResponse.ok) {
-                const error = await playResponse.json();
-                // Check if this is a non-critical error (like the 404 we're seeing)
-                if (error.error?.status === 404 && error.error?.message?.includes('item_before_load')) {
-                  debug.log('Non-critical playback error, continuing with playback', error);
-                } else {
-                  throw new Error(`Playback failed: ${error.error?.message || 'Unknown error'}`);
-                }
-              }
-
-              // Verify playback started
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              const stateResponse = await makeApiCall(
-                'https://api.spotify.com/v1/me/player',
-                {
-                  method: 'GET',
-                  headers
-                }
-              );
-
-              if (stateResponse.ok) {
-                const state = await stateResponse.json();
-                if (state.is_playing && state.item?.uri === track.uri) {
-                  debug.log('Playback successfully started and verified');
-                  success = true;
-                } else {
-                  debug.log('Playback state verification failed', state);
-                  // Try one more time to start playback
-                  await makeApiCall(
-                    `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
-                    {
-                      method: 'PUT',
-                      headers,
-                      body: JSON.stringify({ uris: [track.uri] })
-                    }
-                  );
-                  // If we're on the last retry, consider it a success if we got this far
-                  if (retryCount === MAX_RETRIES - 1) {
-                    success = true;
-                  }
-                }
-              }
-            } else {
-              debug.log('Pausing playback');
-              const pauseResponse = await makeApiCall(
-                `https://api.spotify.com/v1/me/player/pause?device_id=${player._options.id}`,
-                {
-                  method: 'PUT',
-                  headers
-                }
-              );
-
-              if (!pauseResponse.ok) {
-                const error = await pauseResponse.json();
-                throw new Error(`Pause failed: ${error.error?.message || 'Unknown error'}`);
-              }
-              success = true;
-            }
-          } catch (error) {
-            debug.logError(error, `handlePlayPause attempt ${retryCount + 1}`);
-            // Only set error if it's not a non-critical error
-            if (!error.message?.includes('item_before_load') && !error.message?.includes('PlayLoad event failed with status 404')) {
-              setError(error.message);
-            }
-            // Log additional context
-            debug.log('Playback context', {
-              track,
-              deviceId: spotifyPlayerRef.current?._options.id,
-              isDeviceActive,
-              accessToken: localStorage.getItem('spotify_access_token') ? 'present' : 'missing',
-              attempt: retryCount + 1
-            });
-
-            if (retryCount < MAX_RETRIES - 1) {
-              // Wait before retrying
-              await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-            }
-          } finally {
-            retryCount++;
-          }
-        }
-
-        if (!success) {
-          debug.logError('All playback attempts failed');
-          setError('Failed to start playback after multiple attempts');
-        }
-
-        setIsLoading(false);
-      };
-
-      // Set volume with rate limiting
-      const setVolume = async () => {
-        if (!checkRateLimit('volumeControl')) return;
-        
-        try {
-          debug.log('Setting volume', { volume });
-          await makeApiCall(
-            `https://api.spotify.com/v1/me/player/volume?volume_percent=${volume}&device_id=${player._options.id}`,
-            {
-              method: 'PUT',
-              headers
-            }
-          );
-        } catch (error) {
-          debug.logError(error, 'setVolume');
-        }
-      };
-
-      // Handle track changes and playback state
-      if (track.uri) {
-        handlePlayPause();
-      }
-
-      // Add playback state listener for progress updates
       const handlePlayerStateChanged = (state) => {
         debug.log('Player state changed', {
           position: state.position,
@@ -497,6 +277,7 @@ const MusicPlayer = ({
             previousTrack: currentTrack,
             newTrack: state.track_window?.current_track
           });
+          setCurrentTrack(state.track_window?.current_track);
           onTrackChange(state.track_window?.current_track);
         }
       };
@@ -532,6 +313,13 @@ const MusicPlayer = ({
       player.addListener('authentication_error', handleAuthenticationError);
       player.addListener('account_error', handleAccountError);
       player.addListener('playback_error', handlePlaybackError);
+
+      // Get initial state
+      player.getCurrentState().then(state => {
+        if (state) {
+          handlePlayerStateChanged(state);
+        }
+      });
 
       // Cleanup
       return () => {
@@ -576,6 +364,111 @@ const MusicPlayer = ({
       };
     }
   }, [track, isPlaying, volume, appleMusicUserToken, onProgressUpdate]);
+
+  // Handle play/pause
+  const handlePlayPause = async () => {
+    if (isLoading) {
+      debug.log('Playback operation already in progress');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const player = spotifyPlayerRef.current;
+      if (!player) {
+        throw new Error('No Spotify player instance');
+      }
+
+      // Get current state
+      const state = await player.getCurrentState();
+      if (!state) {
+        throw new Error('Could not get player state');
+      }
+
+      if (state.paused) {
+        debug.log('Resuming playback');
+        await player.resume();
+      } else {
+        debug.log('Pausing playback');
+        await player.pause();
+      }
+
+      // Update local state
+      setIsPlaying(!state.paused);
+    } catch (error) {
+      debug.logError(error, 'handlePlayPause');
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle skip next
+  const handleSkipNext = async () => {
+    if (isLoading) {
+      debug.log('Skip operation already in progress');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const player = spotifyPlayerRef.current;
+      if (!player) {
+        throw new Error('No Spotify player instance');
+      }
+
+      debug.log('Skipping to next track');
+      await player.nextTrack();
+    } catch (error) {
+      debug.logError(error, 'handleSkipNext');
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle skip previous
+  const handleSkipPrevious = async () => {
+    if (isLoading) {
+      debug.log('Skip operation already in progress');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const player = spotifyPlayerRef.current;
+      if (!player) {
+        throw new Error('No Spotify player instance');
+      }
+
+      debug.log('Skipping to previous track');
+      await player.previousTrack();
+    } catch (error) {
+      debug.logError(error, 'handleSkipPrevious');
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Expose controls to parent component
+  useEffect(() => {
+    if (onPlayPause) {
+      onPlayPause(handlePlayPause);
+    }
+    if (onSkipNext) {
+      onSkipNext(handleSkipNext);
+    }
+    if (onSkipPrevious) {
+      onSkipPrevious(handleSkipPrevious);
+    }
+  }, [onPlayPause, onSkipNext, onSkipPrevious]);
 
   // Unified controls (for UI, not actual playback logic)
   return null; // This component does not render UI directly
