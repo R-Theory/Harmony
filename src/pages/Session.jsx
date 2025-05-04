@@ -287,16 +287,33 @@ export default function Session() {
               : track.artist || ''
           };
           
-          debug.log('Updating current track', {
+          debug.log('Queue update received', {
+            queueLength: updatedQueue.length,
+            currentTrack: mappedTrack,
             previousTrack: currentTrack,
-            newTrack: mappedTrack
+            isPlaying
           });
           
-          setCurrentTrack(mappedTrack);
+          // Only update current track if it's different
+          if (!currentTrack || currentTrack.uri !== mappedTrack.uri) {
+            debug.log('Updating current track', {
+              previousTrack: currentTrack,
+              newTrack: mappedTrack
+            });
+            setCurrentTrack(mappedTrack);
+            
+            // If we're not playing, start playback
+            if (!isPlaying) {
+              debug.log('Starting playback for new track');
+              setIsPlaying(true);
+            }
+          }
         } else {
           debug.log('Queue empty, clearing current track');
           setCurrentTrack(null);
+          setIsPlaying(false);
         }
+        
         // Auto-select the host's device if none is selected
         if (!selectedPlaybackDevice && isHost) {
           setSelectedPlaybackDevice({

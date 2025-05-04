@@ -7,6 +7,8 @@ import {
   Box,
   Slider,
   useTheme,
+  Grid,
+  Avatar,
 } from '@mui/material';
 import {
   PlayArrow,
@@ -14,6 +16,7 @@ import {
   SkipNext,
   SkipPrevious,
   VolumeUp,
+  VolumeDown,
 } from '@mui/icons-material';
 
 const PlayerBar = ({
@@ -32,6 +35,8 @@ const PlayerBar = ({
   const [isSeeking, setIsSeeking] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
   const progressInterval = useRef(null);
+  const [lastSeekTime, setLastSeekTime] = useState(0);
+  const [lastVolumeChange, setLastVolumeChange] = useState(0);
 
   // Update local progress when not seeking
   useEffect(() => {
@@ -63,15 +68,57 @@ const PlayerBar = ({
     };
   }, [isPlaying, currentTrack, duration, onSkipNext, isSeeking]);
 
-  const formatTime = (milliseconds) => {
-    const seconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  const handleProgressChange = (event, newValue) => {
+    if (!currentTrack) return;
+    
+    const now = Date.now();
+    if (now - lastSeekTime < SEEK_RATE_LIMIT) {
+      debug.log('Seek rate limited', {
+        timeSinceLastSeek: now - lastSeekTime,
+        requiredInterval: SEEK_RATE_LIMIT
+      });
+      return;
+    }
+    
+    setLastSeekTime(now);
+    onSeek(newValue);
   };
 
-  const handleProgressChange = (event, newValue) => {
-    setLocalProgress(newValue);
+  const handleVolumeChange = (event, newValue) => {
+    if (!currentTrack) return;
+    
+    const now = Date.now();
+    if (now - lastVolumeChange < VOLUME_RATE_LIMIT) {
+      debug.log('Volume change rate limited', {
+        timeSinceLastChange: now - lastVolumeChange,
+        requiredInterval: VOLUME_RATE_LIMIT
+      });
+      return;
+    }
+    
+    setLastVolumeChange(now);
+    onVolumeChange(newValue);
+  };
+
+  // Update progress bar smoothly
+  useEffect(() => {
+    if (!isPlaying || !currentTrack) return;
+    
+    const interval = setInterval(() => {
+      setLocalProgress(prev => {
+        const newProgress = prev + 1000; // Update every second
+        return newProgress <= duration ? newProgress : duration;
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [isPlaying, currentTrack, duration]);
+
+  const formatTime = (ms) => {
+    if (!ms) return '0:00';
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   const handleSeekStart = () => {
@@ -99,70 +146,75 @@ const PlayerBar = ({
         borderTop: `1px solid ${theme.palette.divider}`,
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        {/* Track Info */}
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="subtitle1" noWrap>
-            {currentTrack?.title || 'No track playing'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" noWrap>
-            {currentTrack?.artist || ''}
-          </Typography>
-        </Box>
-
-        {/* Playback Controls */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton 
-            size="small" 
-            onClick={onSkipPrevious}
-            disabled={!currentTrack}
-          >
-            <SkipPrevious />
-          </IconButton>
-          <IconButton 
-            onClick={onPlayPause}
-            disabled={!currentTrack}
-          >
-            {isPlaying ? <Pause /> : <PlayArrow />}
-          </IconButton>
-          <IconButton 
-            size="small" 
-            onClick={onSkipNext}
-            disabled={!currentTrack}
-          >
-            <SkipNext />
-          </IconButton>
-        </Box>
-
-        {/* Progress Bar */}
-        <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            {formatTime(localProgress)}
-          </Typography>
-          <Slider
-            value={localProgress}
-            max={duration}
-            onChange={handleProgressChange}
-            onChangeCommitted={handleSeekEnd}
-            onChangeStart={handleSeekStart}
-            sx={{ mx: 2 }}
-            disabled={!currentTrack}
-          />
-          <Typography variant="body2" color="text.secondary">
-            {formatTime(duration)}
-          </Typography>
-        </Box>
-
-        {/* Volume Control */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <VolumeUp />
-          <Slider
-            value={volume}
-            onChange={onVolumeChange}
-            sx={{ width: 100 }}
-          />
-        </Box>
-      </Box>
+      <Grid container spacing={2} alignItems="center">
+        <Grid item xs={12} sm={4}>
+          {currentTrack && (
+            <Box display="flex" alignItems="center">
+              <Avatar
+                src={currentTrack.albumArt}
+                alt={currentTrack.title}
+                sx={{ width: 56, height: 56, mr: 2 }}
+              />
+              <Box>
+                <Typography variant="subtitle1" noWrap>
+                  {currentTrack.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" noWrap>
+                  {currentTrack.artist}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Box display="flex" flexDirection="column" alignItems="center">
+            <Box display="flex" alignItems="center" mb={1}>
+              <IconButton onClick={onSkipPrevious} disabled={!currentTrack}>
+                <SkipPrevious />
+              </IconButton>
+              <IconButton
+                onClick={onPlayPause}
+                disabled={!currentTrack}
+                sx={{ mx: 2 }}
+              >
+                {isPlaying ? <Pause /> : <PlayArrow />}
+              </IconButton>
+              <IconButton onClick={onSkipNext} disabled={!currentTrack}>
+                <SkipNext />
+              </IconButton>
+            </Box>
+            <Box display="flex" alignItems="center" width="100%">
+              <Typography variant="body2" sx={{ minWidth: 40 }}>
+                {formatTime(localProgress)}
+              </Typography>
+              <Slider
+                value={localProgress}
+                onChange={handleProgressChange}
+                max={duration}
+                disabled={!currentTrack}
+                sx={{ mx: 2 }}
+              />
+              <Typography variant="body2" sx={{ minWidth: 40 }}>
+                {formatTime(duration)}
+              </Typography>
+            </Box>
+          </Box>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Box display="flex" alignItems="center" justifyContent="flex-end">
+            <VolumeDown />
+            <Slider
+              value={volume}
+              onChange={handleVolumeChange}
+              min={0}
+              max={100}
+              disabled={!currentTrack}
+              sx={{ width: 100 }}
+            />
+            <VolumeUp />
+          </Box>
+        </Grid>
+      </Grid>
     </Paper>
   );
 };

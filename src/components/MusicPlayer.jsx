@@ -27,13 +27,15 @@ const MusicPlayer = ({
   onVolumeChange,
   spotifyPlayerRef,
   appleMusicUserToken,
-  onProgressUpdate
+  onProgressUpdate,
+  onTrackChange
 }) => {
   const musicKitRef = useRef(null);
   const [isDeviceActive, setIsDeviceActive] = useState(false);
   const [lastApiCall, setLastApiCall] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [currentTrack, setCurrentTrack] = useState(track);
 
   // Rate limiting configuration based on Spotify API limits
   const RATE_LIMIT = {
@@ -260,9 +262,34 @@ const MusicPlayer = ({
         setError(null);
 
         try {
-          const activated = await activateDevice();
+          // First verify the track exists
+          const trackResponse = await makeApiCall(
+            `https://api.spotify.com/v1/tracks/${track.uri.split(':')[2]}`,
+            {
+              method: 'GET',
+              headers
+            }
+          );
+
+          if (!trackResponse.ok) {
+            const error = await trackResponse.json();
+            throw new Error(`Track verification failed: ${error.error?.message || 'Unknown error'}`);
+          }
+
+          // Activate device with retries
+          let activated = false;
+          let retries = 3;
+          while (!activated && retries > 0) {
+            activated = await activateDevice();
+            if (!activated) {
+              debug.log(`Device activation attempt ${4 - retries} failed, retrying...`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              retries--;
+            }
+          }
+
           if (!activated) {
-            throw new Error('Failed to activate device for playback');
+            throw new Error('Failed to activate device for playback after multiple attempts');
           }
 
           if (isPlaying) {
@@ -271,19 +298,8 @@ const MusicPlayer = ({
               deviceId: player._options.id
             });
 
-            // First verify the track exists
-            const trackResponse = await makeApiCall(
-              `https://api.spotify.com/v1/tracks/${track.uri.split(':')[2]}`,
-              {
-                method: 'GET',
-                headers
-              }
-            );
-
-            if (!trackResponse.ok) {
-              const error = await trackResponse.json();
-              throw new Error(`Track verification failed: ${error.error?.message || 'Unknown error'}`);
-            }
+            // Add a small delay after device activation
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             const playResponse = await makeApiCall(
               `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
@@ -296,7 +312,12 @@ const MusicPlayer = ({
 
             if (!playResponse.ok) {
               const error = await playResponse.json();
-              throw new Error(`Playback failed: ${error.error?.message || 'Unknown error'}`);
+              // Check if this is a non-critical error (like the 404 we're seeing)
+              if (error.error?.status === 404 && error.error?.message?.includes('item_before_load')) {
+                debug.log('Non-critical playback error, continuing with playback', error);
+              } else {
+                throw new Error(`Playback failed: ${error.error?.message || 'Unknown error'}`);
+              }
             }
           } else {
             debug.log('Pausing playback');
@@ -315,7 +336,10 @@ const MusicPlayer = ({
           }
         } catch (error) {
           debug.logError(error, 'handlePlayPause');
-          setError(error.message);
+          // Only set error if it's not a non-critical error
+          if (!error.message?.includes('item_before_load')) {
+            setError(error.message);
+          }
           // Log additional context
           debug.log('Playback context', {
             track,
@@ -353,52 +377,74 @@ const MusicPlayer = ({
 
       // Add playback state listener for progress updates
       const handlePlayerStateChanged = (state) => {
-        if (!state) return;
-
         debug.log('Player state changed', {
           position: state.position,
           duration: state.duration,
-          isPlaying: !state.paused,
-          track: state.track_window?.current_track
+          paused: state.paused,
+          track_window: {
+            current_track: state.track_window?.current_track,
+            next_tracks: state.track_window?.next_tracks?.length
+          }
         });
-        
-        if (onProgressUpdate) {
+
+        // Update progress and duration
+        if (state.position !== undefined) {
           onProgressUpdate(state.position, state.duration);
+        }
+
+        // Update playing state
+        setIsPlaying(!state.paused);
+
+        // Check if track changed
+        if (state.track_window?.current_track?.uri !== currentTrack?.uri) {
+          debug.log('Track changed in player', {
+            previousTrack: currentTrack,
+            newTrack: state.track_window?.current_track
+          });
+          onTrackChange(state.track_window?.current_track);
         }
       };
 
+      const handleInitializationError = (error) => {
+        debug.logError(error, 'Player initialization');
+        setError(error.message);
+      };
+
+      const handleAuthenticationError = (error) => {
+        debug.logError(error, 'Player authentication');
+        setError(error.message);
+      };
+
+      const handleAccountError = (error) => {
+        debug.logError(error, 'Player account');
+        setError(error.message);
+      };
+
+      const handlePlaybackError = (error) => {
+        debug.logError(error, 'Player playback');
+        // Only set error if it's not a non-critical error
+        if (!error.message?.includes('item_before_load')) {
+          setError(error.message);
+        }
+      };
+
+      // Add event listeners
       player.addListener('player_state_changed', handlePlayerStateChanged);
+      player.addListener('initialization_error', handleInitializationError);
+      player.addListener('authentication_error', handleAuthenticationError);
+      player.addListener('account_error', handleAccountError);
+      player.addListener('playback_error', handlePlaybackError);
 
-      // Add error listeners
-      player.addListener('initialization_error', (error) => {
-        debug.logError(error, 'Spotify player initialization error');
-        setError('Failed to initialize Spotify player');
-      });
-
-      player.addListener('authentication_error', (error) => {
-        debug.logError(error, 'Spotify authentication error');
-        setError('Spotify authentication failed');
-      });
-
-      player.addListener('account_error', (error) => {
-        debug.logError(error, 'Spotify account error');
-        setError('Spotify account error');
-      });
-
-      player.addListener('playback_error', (error) => {
-        debug.logError(error, 'Spotify playback error');
-        setError('Playback error occurred');
-      });
-
+      // Cleanup
       return () => {
         player.removeListener('player_state_changed', handlePlayerStateChanged);
-        player.removeListener('initialization_error');
-        player.removeListener('authentication_error');
-        player.removeListener('account_error');
-        player.removeListener('playback_error');
+        player.removeListener('initialization_error', handleInitializationError);
+        player.removeListener('authentication_error', handleAuthenticationError);
+        player.removeListener('account_error', handleAccountError);
+        player.removeListener('playback_error', handlePlaybackError);
       };
     }
-  }, [track, isPlaying, volume, spotifyPlayerRef, onProgressUpdate]);
+  }, [track, isPlaying, volume, spotifyPlayerRef, onProgressUpdate, onTrackChange]);
 
   // Handle Apple Music playback
   useEffect(() => {
@@ -447,7 +493,8 @@ MusicPlayer.propTypes = {
   onVolumeChange: PropTypes.func,
   spotifyPlayerRef: PropTypes.object,
   appleMusicUserToken: PropTypes.string,
-  onProgressUpdate: PropTypes.func
+  onProgressUpdate: PropTypes.func,
+  onTrackChange: PropTypes.func
 };
 
 export default MusicPlayer; 
