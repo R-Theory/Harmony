@@ -85,6 +85,7 @@ export default function Session() {
   const navigate = useNavigate();
   const theme = useTheme();
   
+  // State declarations
   const [isConnected, setIsConnected] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -100,14 +101,27 @@ export default function Session() {
   const [currentTrack, setCurrentTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [queue, setQueue] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [lastQueueUpdate, setLastQueueUpdate] = useState(0);
+  const [queueNotification, setQueueNotification] = useState({ open: false, message: '', severity: 'success' });
+  const [devices, setDevices] = useState([]);
+  const [isDeviceDialogOpen, setIsDeviceDialogOpen] = useState(false);
+  const [spotifyReady, setSpotifyReady] = useState(false);
+  const [spotifyDeviceId, setSpotifyDeviceId] = useState(null);
+  const [appleMusicUserToken, setAppleMusicUserToken] = useState(null);
+  const [appleMusicReady, setAppleMusicReady] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [selectedPlaybackDevice, setSelectedPlaybackDevice] = useState(null);
   const [showDeviceMenu, setShowDeviceMenu] = useState(false);
-  const [appleMusicReady, setAppleMusicReady] = useState(false);
-  const [appleMusicUserToken, setAppleMusicUserToken] = useState(null);
-  
-  const audioRef = React.useRef(null);
-  const peerStreamRef = React.useRef(null);
-  
+
+  // Refs
+  const audioRef = useRef(null);
+  const spotifyPlayerRef = useRef(null);
+
+  // Constants
+  const QUEUE_UPDATE_INTERVAL = 1000; // 1 second between queue updates
+
   // Generate or get a userId for this device
   const [userId] = useState(() => {
     let id = localStorage.getItem('user_id');
@@ -334,7 +348,7 @@ export default function Session() {
     return () => {
       queueService.disconnect();
     };
-  }, [sessionId, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice, lastQueueUpdate]);
+  }, [sessionId, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice]);
 
   // Playback control handlers
   const handlePlayPause = () => {
@@ -403,9 +417,6 @@ export default function Session() {
   };
 
   let spotifyPlayer = null;
-  const spotifyPlayerRef = useRef(null);
-  const [spotifyReady, setSpotifyReady] = useState(false);
-  const [spotifyDeviceId, setSpotifyDeviceId] = useState(null);
 
   // Spotify Web Playback SDK loader
   useEffect(() => {
@@ -670,15 +681,15 @@ export default function Session() {
     }
   }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying, spotifyDeviceId]);
 
-  // Add notification state for Queue
-  const [queueNotification, setQueueNotification] = useState({ open: false, message: '', severity: 'success' });
+  // Handle queue updates
+  const handleQueueUpdate = (newQueue) => {
+    setQueue(newQueue);
+  };
 
-  // Add handler for showing notifications in Queue
   const showQueueNotification = (message, severity = 'success') => {
     setQueueNotification({ open: true, message, severity });
   };
 
-  // Add/Remove queue handlers for Queue
   const handleAddToQueue = async (track) => {
     try {
       await queueService.addToQueue(track);
@@ -687,18 +698,15 @@ export default function Session() {
       showQueueNotification(error.message, 'error');
     }
   };
+
   const handleRemoveFromQueue = async (trackId) => {
     try {
-      await queueService.removeFromQueue({ id: trackId });
+      await queueService.removeFromQueue(trackId);
       showQueueNotification('Removed track from session queue');
     } catch (error) {
       showQueueNotification(error.message, 'error');
     }
   };
-
-  // Add progress state
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
 
   // Handle progress updates from MusicPlayer
   const handleProgressUpdate = (position, totalDuration) => {
@@ -706,45 +714,22 @@ export default function Session() {
     setDuration(totalDuration);
   };
 
-  // Handle seeking
+  // Handle seeking in the track
   const handleSeek = async (position) => {
-    if (!currentTrack || !selectedPlaybackDevice) return;
-
+    if (!currentTrack) return;
+    
     try {
-      if (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) {
-        const token = localStorage.getItem('spotify_access_token');
-        if (!token) {
-          console.error('[Playback] No Spotify token available for seeking');
-          return;
-        }
-
-        const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${position}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to seek in Spotify playback');
-        }
-
-        setProgress(position);
-      } else if (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic) {
+      if (currentTrack.source === 'spotify' && spotifyPlayerRef.current) {
+        await spotifyPlayerRef.current.seek(position);
+      } else if (currentTrack.source === 'appleMusic' && appleMusicUserToken) {
         const music = window.MusicKit.getInstance();
-        await music.seekToTime(position / 1000); // Convert to seconds
-        setProgress(position);
+        await music.seekToTime(position / 1000);
       }
     } catch (error) {
-      console.error('[Playback] Error seeking:', error);
+      debug.logError(error, 'handleSeek');
+      showQueueNotification('Failed to seek in track', 'error');
     }
   };
-
-  // Rate limiting for queue updates
-  const QUEUE_UPDATE_INTERVAL = 1000; // 1 second between queue updates
-  const [lastQueueUpdate, setLastQueueUpdate] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
 
   if (isInitializing) {
     return (
