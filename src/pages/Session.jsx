@@ -259,8 +259,8 @@ export default function Session() {
   }, [peerConnection]);
   
   useEffect(() => {
-    if (!sessionId) return;
-    // Set up queueService callbacks
+    if (!queueService.socket) return;
+
     queueService.setCallbacks(
       (updatedQueue) => {
         const now = Date.now();
@@ -306,6 +306,11 @@ export default function Session() {
             if (!isPlaying) {
               debug.log('Starting playback for new track');
               setIsPlaying(true);
+            } else {
+              // If we're already playing but the track changed, force a restart
+              debug.log('Restarting playback for new track');
+              setIsPlaying(false);
+              setTimeout(() => setIsPlaying(true), 100);
             }
           }
         } else {
@@ -330,42 +335,7 @@ export default function Session() {
         setError({ message: errorMessage });
       }
     );
-    queueService.connect(sessionId);
-    // Initial fetch
-    queueService.getQueue();
-    // Emit device capabilities to backend
-    if (queueService.socket) {
-      queueService.socket.emit('device-capabilities', {
-        sessionId,
-        userId,
-        hasSpotify,
-        hasAppleMusic
-      });
-    } else {
-      // Wait for socket to connect, then emit
-      const interval = setInterval(() => {
-        if (queueService.socket && queueService.isConnected) {
-          queueService.socket.emit('device-capabilities', {
-            sessionId,
-            userId,
-            hasSpotify,
-            hasAppleMusic
-          });
-          clearInterval(interval);
-        }
-      }, 500);
-    }
-    // Listen for updated device list from backend
-    if (queueService.socket) {
-      queueService.socket.on('device-list', (deviceList) => {
-        setGuests(deviceList.filter(d => d.userId !== userId));
-      });
-    }
-    // Clean up on unmount
-    return () => {
-      queueService.disconnect();
-    };
-  }, [sessionId, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice]);
+  }, [queueService.socket, userId, hasSpotify, hasAppleMusic, isHost, selectedPlaybackDevice]);
 
   // Playback control handlers
   const handlePlayPause = () => {

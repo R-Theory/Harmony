@@ -301,6 +301,28 @@ const MusicPlayer = ({
             // Add a small delay after device activation
             await new Promise(resolve => setTimeout(resolve, 500));
 
+            // First transfer playback to our device
+            const transferResponse = await makeApiCall(
+              'https://api.spotify.com/v1/me/player',
+              {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({
+                  device_ids: [player._options.id],
+                  play: false
+                })
+              }
+            );
+
+            if (!transferResponse.ok) {
+              const error = await transferResponse.json();
+              throw new Error(`Failed to transfer playback: ${error.error?.message || 'Unknown error'}`);
+            }
+
+            // Wait for transfer to complete
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Then start playback
             const playResponse = await makeApiCall(
               `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
               {
