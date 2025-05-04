@@ -18,6 +18,11 @@ import {
   VolumeUp,
   VolumeDown,
 } from '@mui/icons-material';
+import DebugLogger from '../utils/debug';
+
+const debug = new DebugLogger('PlayerBar');
+const SEEK_RATE_LIMIT = 1000; // 1 second between seeks
+const VOLUME_RATE_LIMIT = 500; // 500ms between volume changes
 
 const PlayerBar = ({
   currentTrack,
