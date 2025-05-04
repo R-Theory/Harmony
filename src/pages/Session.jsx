@@ -453,14 +453,14 @@ export default function Session() {
     if (spotifyReady && !spotifyPlayerRef.current) {
       const token = localStorage.getItem('spotify_access_token');
       if (!token) {
-        console.error('[Spotify] No access token found');
+        debug.logError('[Spotify] No access token found');
         return;
       }
 
       // Check if token is expired
       const tokenExpiry = localStorage.getItem('spotify_token_expiry');
       if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {
-        console.log('[Spotify] Token expired, attempting to refresh...');
+        debug.log('[Spotify] Token expired, attempting to refresh...');
         const refreshToken = localStorage.getItem('spotify_refresh_token');
         if (refreshToken) {
           fetch(`${window.location.origin}/api/refresh_token?refresh_token=${refreshToken}`)
@@ -471,20 +471,20 @@ export default function Session() {
                 localStorage.setItem('spotify_token_expiry', (Date.now() + 3600000).toString());
                 initializeSpotifyPlayer(data.access_token);
               } else {
-                console.error('[Spotify] Failed to refresh token');
+                debug.logError('[Spotify] Failed to refresh token');
                 localStorage.removeItem('spotify_access_token');
                 localStorage.removeItem('spotify_refresh_token');
                 localStorage.removeItem('spotify_connected');
               }
             })
             .catch(error => {
-              console.error('[Spotify] Error refreshing token:', error);
+              debug.logError('[Spotify] Error refreshing token:', error);
               localStorage.removeItem('spotify_access_token');
               localStorage.removeItem('spotify_refresh_token');
               localStorage.removeItem('spotify_connected');
             });
         } else {
-          console.error('[Spotify] No refresh token found');
+          debug.logError('[Spotify] No refresh token found');
           localStorage.removeItem('spotify_access_token');
           localStorage.removeItem('spotify_connected');
         }
@@ -496,62 +496,87 @@ export default function Session() {
   }, [spotifyReady]);
 
   const initializeSpotifyPlayer = (token) => {
-    spotifyPlayer = new window.Spotify.Player({
-      name: 'Harmony Web Player',
-      getOAuthToken: cb => { cb(token); },
-      volume: 0.8
-    });
+    try {
+      spotifyPlayer = new window.Spotify.Player({
+        name: 'Harmony Web Player',
+        getOAuthToken: cb => { cb(token); },
+        volume: 0.8
+      });
 
-    spotifyPlayer.addListener('ready', ({ device_id }) => {
-      console.log('[Spotify SDK] Player ready with device_id', device_id);
-      spotifyPlayerRef.current = spotifyPlayer;
-      setSpotifyDeviceId(device_id);
-    });
+      spotifyPlayer.addListener('ready', ({ device_id }) => {
+        debug.log('[Spotify SDK] Player ready with device_id', device_id);
+        spotifyPlayerRef.current = spotifyPlayer;
+        setSpotifyDeviceId(device_id);
+        
+        // Transfer playback to this device
+        fetch('https://api.spotify.com/v1/me/player', {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ device_ids: [device_id], play: true })
+        }).catch(error => debug.logError('[Spotify] Error transferring playback:', error));
+      });
 
-    spotifyPlayer.addListener('not_ready', ({ device_id }) => {
-      console.log('[Spotify SDK] Player not ready', device_id);
-    });
+      spotifyPlayer.addListener('not_ready', ({ device_id }) => {
+        debug.log('[Spotify SDK] Player not ready', device_id);
+        // Try to reconnect
+        setTimeout(() => spotifyPlayer.connect(), 5000);
+      });
 
-    spotifyPlayer.addListener('initialization_error', e => console.error('[Spotify SDK] Init error', e));
-    spotifyPlayer.addListener('authentication_error', e => {
-      console.error('[Spotify SDK] Auth error', e);
-      // Try to refresh the token
-      const refreshToken = localStorage.getItem('spotify_refresh_token');
-      if (refreshToken) {
-        fetch(`${window.location.origin}/api/refresh_token?refresh_token=${refreshToken}`)
-          .then(response => response.json())
-          .then(data => {
-            if (data.access_token) {
-              localStorage.setItem('spotify_access_token', data.access_token);
-              localStorage.setItem('spotify_token_expiry', (Date.now() + 3600000).toString());
-              spotifyPlayer.connect();
-            }
-          })
-          .catch(error => console.error('[Spotify] Error refreshing token:', error));
-      }
-    });
-    spotifyPlayer.addListener('account_error', e => console.error('[Spotify SDK] Account error', e));
-    spotifyPlayer.addListener('playback_error', e => console.error('[Spotify SDK] Playback error', e));
-    
-    // Add playback state listeners
-    spotifyPlayer.addListener('player_state_changed', state => {
-      if (state) {
-        console.log('[Spotify SDK] Player state changed:', state);
-        setIsPlaying(!state.paused);
-        // Update current track if it's different
-        if (state.track_window.current_track) {
-          const currentTrack = {
-            ...state.track_window.current_track,
-            title: state.track_window.current_track.name,
-            artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
-            source: 'spotify'
-          };
-          setCurrentTrack(currentTrack);
+      spotifyPlayer.addListener('initialization_error', e => {
+        debug.logError('[Spotify SDK] Init error', e);
+        // Try to reconnect
+        setTimeout(() => spotifyPlayer.connect(), 5000);
+      });
+
+      spotifyPlayer.addListener('authentication_error', e => {
+        debug.logError('[Spotify SDK] Auth error', e);
+        // Try to refresh the token
+        const refreshToken = localStorage.getItem('spotify_refresh_token');
+        if (refreshToken) {
+          fetch(`${window.location.origin}/api/refresh_token?refresh_token=${refreshToken}`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.access_token) {
+                localStorage.setItem('spotify_access_token', data.access_token);
+                localStorage.setItem('spotify_token_expiry', (Date.now() + 3600000).toString());
+                spotifyPlayer.connect();
+              }
+            })
+            .catch(error => debug.logError('[Spotify] Error refreshing token:', error));
         }
-      }
-    });
-    
-    spotifyPlayer.connect();
+      });
+
+      spotifyPlayer.addListener('account_error', e => debug.logError('[Spotify SDK] Account error', e));
+      spotifyPlayer.addListener('playback_error', e => debug.logError('[Spotify SDK] Playback error', e));
+      
+      // Add playback state listeners
+      spotifyPlayer.addListener('player_state_changed', state => {
+        if (state) {
+          debug.log('[Spotify SDK] Player state changed:', state);
+          setIsPlaying(!state.paused);
+          setProgress(state.position);
+          setDuration(state.duration);
+          
+          // Update current track if it's different
+          if (state.track_window.current_track) {
+            const currentTrack = {
+              ...state.track_window.current_track,
+              title: state.track_window.current_track.name,
+              artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
+              source: 'spotify'
+            };
+            setCurrentTrack(currentTrack);
+          }
+        }
+      });
+      
+      spotifyPlayer.connect();
+    } catch (error) {
+      debug.logError('[Spotify] Error initializing player:', error);
+    }
   };
 
   // Load and initialize MusicKit JS
