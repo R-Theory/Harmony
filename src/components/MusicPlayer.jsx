@@ -154,6 +154,7 @@ const MusicPlayer = ({
 
   const activateDevice = async () => {
     if (!checkRateLimit('deviceControl')) {
+      debug.log('Rate limit hit for device activation');
       return false;
     }
 
@@ -170,13 +171,28 @@ const MusicPlayer = ({
         return false;
       }
 
+      // First check if we have any active devices
+      const devicesResponse = await makeApiCall('https://api.spotify.com/v1/me/player/devices', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      const devicesData = await devicesResponse.json();
+      debug.log('Available devices', devicesData.devices);
+
       const isActive = await checkActiveDevice();
       if (isActive) {
         debug.log('Device already active');
         return true;
       }
 
-      debug.log('Activating device...');
+      debug.log('Activating device...', {
+        deviceId: player._options.id,
+        deviceName: player._options.name
+      });
+
+      // Try to transfer playback to our device
       const response = await makeApiCall('https://api.spotify.com/v1/me/player', {
         method: 'PUT',
         headers: {
@@ -189,15 +205,31 @@ const MusicPlayer = ({
         })
       });
 
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`Device activation failed: ${error.error?.message || 'Unknown error'}`);
+      }
+
       // Wait for device to be fully activated
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       const activationVerified = await checkActiveDevice();
-      debug.log('Device activation result', { success: activationVerified });
+      debug.log('Device activation result', { 
+        success: activationVerified,
+        deviceId: player._options.id
+      });
+      
+      if (!activationVerified) {
+        throw new Error('Device activation verification failed');
+      }
       
       return activationVerified;
     } catch (error) {
       debug.logError(error, 'activateDevice');
+      debug.log('Device activation context', {
+        deviceId: spotifyPlayerRef.current?._options.id,
+        accessToken: localStorage.getItem('spotify_access_token') ? 'present' : 'missing'
+      });
       return false;
     }
   };
@@ -234,7 +266,25 @@ const MusicPlayer = ({
           }
 
           if (isPlaying) {
-            debug.log('Initiating playback');
+            debug.log('Initiating playback', {
+              trackUri: track.uri,
+              deviceId: player._options.id
+            });
+
+            // First verify the track exists
+            const trackResponse = await makeApiCall(
+              `https://api.spotify.com/v1/tracks/${track.uri.split(':')[2]}`,
+              {
+                method: 'GET',
+                headers
+              }
+            );
+
+            if (!trackResponse.ok) {
+              const error = await trackResponse.json();
+              throw new Error(`Track verification failed: ${error.error?.message || 'Unknown error'}`);
+            }
+
             const playResponse = await makeApiCall(
               `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
               {
@@ -246,7 +296,7 @@ const MusicPlayer = ({
 
             if (!playResponse.ok) {
               const error = await playResponse.json();
-              throw new Error(error.error?.message || 'Failed to start playback');
+              throw new Error(`Playback failed: ${error.error?.message || 'Unknown error'}`);
             }
           } else {
             debug.log('Pausing playback');
@@ -260,12 +310,19 @@ const MusicPlayer = ({
 
             if (!pauseResponse.ok) {
               const error = await pauseResponse.json();
-              throw new Error(error.error?.message || 'Failed to pause playback');
+              throw new Error(`Pause failed: ${error.error?.message || 'Unknown error'}`);
             }
           }
         } catch (error) {
           debug.logError(error, 'handlePlayPause');
           setError(error.message);
+          // Log additional context
+          debug.log('Playback context', {
+            track,
+            deviceId: spotifyPlayerRef.current?._options.id,
+            isDeviceActive,
+            accessToken: localStorage.getItem('spotify_access_token') ? 'present' : 'missing'
+          });
         } finally {
           setIsLoading(false);
         }
