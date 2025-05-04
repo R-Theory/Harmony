@@ -51,12 +51,22 @@ class QueueService {
       // Add more detailed error handling
       perMessageDeflate: {
         threshold: 1024
+      },
+      // Add query parameters for debugging
+      query: {
+        clientType: 'web',
+        version: '1.0.0',
+        timestamp: Date.now()
       }
     });
 
     // Set up event listeners
     this.socket.on('connect', () => {
-      console.log('Connected to queue service');
+      console.log('Connected to queue service:', {
+        id: this.socket.id,
+        url: socketUrl,
+        time: new Date().toISOString()
+      });
       this.isConnected = true;
       this.socket.emit('join-session', sessionId);
     });
@@ -76,7 +86,11 @@ class QueueService {
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
+      console.error('Socket connection error:', {
+        error: error.message,
+        code: error.code,
+        time: new Date().toISOString()
+      });
       this.isConnected = false;
       if (this.onError) {
         this.onError('Failed to connect to queue service. Please try refreshing the page.');
@@ -91,11 +105,17 @@ class QueueService {
     });
 
     this.socket.on('error', (error) => {
-      console.error('Socket error:', error);
+      console.error('Socket error:', {
+        error: error.message,
+        time: new Date().toISOString()
+      });
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('Disconnected from queue service:', reason);
+      console.log('Disconnected from queue service:', {
+        reason,
+        time: new Date().toISOString()
+      });
       this.isConnected = false;
       if (reason === 'io server disconnect') {
         // The server has forcefully disconnected the socket
@@ -108,7 +128,10 @@ class QueueService {
 
     // Handle reconnection
     this.socket.on('reconnect', (attemptNumber) => {
-      console.log('Reconnected to queue service after', attemptNumber, 'attempts');
+      console.log('Reconnected to queue service:', {
+        attemptNumber,
+        time: new Date().toISOString()
+      });
       this.isConnected = true;
       if (this.sessionId) {
         this.socket.emit('join-session', this.sessionId);
@@ -116,7 +139,10 @@ class QueueService {
     });
 
     this.socket.on('reconnect_error', (error) => {
-      console.error('Socket reconnection error:', error);
+      console.error('Socket reconnection error:', {
+        error: error.message,
+        time: new Date().toISOString()
+      });
       // Implement exponential backoff for reconnection attempts
       const delay = Math.min(1000 * Math.pow(2, this.socket.io.reconnectionAttempts), 30000);
       setTimeout(() => {
@@ -143,15 +169,24 @@ class QueueService {
 
     // Add more detailed logging
     this.socket.on('connect_timeout', (timeout) => {
-      console.error('Socket connection timeout:', timeout);
+      console.error('Socket connection timeout:', {
+        timeout,
+        time: new Date().toISOString()
+      });
     });
 
     this.socket.on('reconnect_attempt', (attemptNumber) => {
-      console.log('Reconnection attempt:', attemptNumber);
+      console.log('Reconnection attempt:', {
+        attemptNumber,
+        time: new Date().toISOString()
+      });
     });
 
     this.socket.on('reconnecting', (attemptNumber) => {
-      console.log('Reconnecting to queue service, attempt:', attemptNumber);
+      console.log('Reconnecting to queue service:', {
+        attemptNumber,
+        time: new Date().toISOString()
+      });
     });
 
     this.socket.on('ping', () => {
@@ -159,7 +194,10 @@ class QueueService {
     });
 
     this.socket.on('pong', (latency) => {
-      console.log('Socket pong, latency:', latency);
+      console.log('Socket pong:', {
+        latency,
+        time: new Date().toISOString()
+      });
     });
   }
 

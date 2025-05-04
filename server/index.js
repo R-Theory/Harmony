@@ -60,7 +60,8 @@ const io = new Server(httpServer, {
   cors: {
     origin: getAllowedOrigins(),
     methods: ['GET', 'POST'],
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
   },
   transports: ['polling', 'websocket'],
   allowEIO3: true,
@@ -469,8 +470,8 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-const port = process.env.PORT || 3001; // Use Render's port or default
-httpServer.listen(port, '0.0.0.0', () => { // Listen on all interfaces
+const port = process.env.PORT || 3001;
+httpServer.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
 });
 
