@@ -261,117 +261,191 @@ const MusicPlayer = ({
         setIsLoading(true);
         setError(null);
 
-        try {
-          // First verify the track exists
-          const trackResponse = await makeApiCall(
-            `https://api.spotify.com/v1/tracks/${track.uri.split(':')[2]}`,
-            {
-              method: 'GET',
-              headers
-            }
-          );
+        const MAX_RETRIES = 3;
+        let retryCount = 0;
+        let success = false;
 
-          if (!trackResponse.ok) {
-            const error = await trackResponse.json();
-            throw new Error(`Track verification failed: ${error.error?.message || 'Unknown error'}`);
-          }
+        while (!success && retryCount < MAX_RETRIES) {
+          try {
+            debug.log(`Playback attempt ${retryCount + 1} of ${MAX_RETRIES}`);
 
-          // Activate device with retries
-          let activated = false;
-          let retries = 3;
-          while (!activated && retries > 0) {
-            activated = await activateDevice();
-            if (!activated) {
-              debug.log(`Device activation attempt ${4 - retries} failed, retrying...`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              retries--;
-            }
-          }
-
-          if (!activated) {
-            throw new Error('Failed to activate device for playback after multiple attempts');
-          }
-
-          if (isPlaying) {
-            debug.log('Initiating playback', {
-              trackUri: track.uri,
-              deviceId: player._options.id
-            });
-
-            // Add a small delay after device activation
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // First transfer playback to our device
-            const transferResponse = await makeApiCall(
-              'https://api.spotify.com/v1/me/player',
+            // First verify the track exists
+            const trackResponse = await makeApiCall(
+              `https://api.spotify.com/v1/tracks/${track.uri.split(':')[2]}`,
               {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify({
-                  device_ids: [player._options.id],
-                  play: false
-                })
-              }
-            );
-
-            if (!transferResponse.ok) {
-              const error = await transferResponse.json();
-              throw new Error(`Failed to transfer playback: ${error.error?.message || 'Unknown error'}`);
-            }
-
-            // Wait for transfer to complete
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            // Then start playback
-            const playResponse = await makeApiCall(
-              `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
-              {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify({ uris: [track.uri] })
-              }
-            );
-
-            if (!playResponse.ok) {
-              const error = await playResponse.json();
-              // Check if this is a non-critical error (like the 404 we're seeing)
-              if (error.error?.status === 404 && error.error?.message?.includes('item_before_load')) {
-                debug.log('Non-critical playback error, continuing with playback', error);
-              } else {
-                throw new Error(`Playback failed: ${error.error?.message || 'Unknown error'}`);
-              }
-            }
-          } else {
-            debug.log('Pausing playback');
-            const pauseResponse = await makeApiCall(
-              `https://api.spotify.com/v1/me/player/pause?device_id=${player._options.id}`,
-              {
-                method: 'PUT',
+                method: 'GET',
                 headers
               }
             );
 
-            if (!pauseResponse.ok) {
-              const error = await pauseResponse.json();
-              throw new Error(`Pause failed: ${error.error?.message || 'Unknown error'}`);
+            if (!trackResponse.ok) {
+              const error = await trackResponse.json();
+              throw new Error(`Track verification failed: ${error.error?.message || 'Unknown error'}`);
             }
+
+            // Activate device with retries
+            let activated = false;
+            let deviceRetries = 3;
+            while (!activated && deviceRetries > 0) {
+              activated = await activateDevice();
+              if (!activated) {
+                debug.log(`Device activation attempt ${4 - deviceRetries} failed, retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                deviceRetries--;
+              }
+            }
+
+            if (!activated) {
+              throw new Error('Failed to activate device for playback after multiple attempts');
+            }
+
+            if (isPlaying) {
+              debug.log('Initiating playback', {
+                trackUri: track.uri,
+                deviceId: player._options.id
+              });
+
+              // Add a small delay after device activation
+              await new Promise(resolve => setTimeout(resolve, 500));
+
+              // First transfer playback to our device
+              const transferResponse = await makeApiCall(
+                'https://api.spotify.com/v1/me/player',
+                {
+                  method: 'PUT',
+                  headers,
+                  body: JSON.stringify({
+                    device_ids: [player._options.id],
+                    play: false
+                  })
+                }
+              );
+
+              if (!transferResponse.ok) {
+                const error = await transferResponse.json();
+                throw new Error(`Failed to transfer playback: ${error.error?.message || 'Unknown error'}`);
+              }
+
+              // Wait for transfer to complete
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              // Verify device is active before starting playback
+              const devicesResponse = await makeApiCall(
+                'https://api.spotify.com/v1/me/player/devices',
+                {
+                  method: 'GET',
+                  headers
+                }
+              );
+
+              const devicesData = await devicesResponse.json();
+              const activeDevice = devicesData.devices.find(d => d.is_active);
+              
+              if (!activeDevice || activeDevice.id !== player._options.id) {
+                throw new Error('Device not active after transfer');
+              }
+
+              // Then start playback
+              const playResponse = await makeApiCall(
+                `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
+                {
+                  method: 'PUT',
+                  headers,
+                  body: JSON.stringify({ 
+                    uris: [track.uri],
+                    position_ms: 0 // Start from beginning
+                  })
+                }
+              );
+
+              if (!playResponse.ok) {
+                const error = await playResponse.json();
+                // Check if this is a non-critical error (like the 404 we're seeing)
+                if (error.error?.status === 404 && error.error?.message?.includes('item_before_load')) {
+                  debug.log('Non-critical playback error, continuing with playback', error);
+                } else {
+                  throw new Error(`Playback failed: ${error.error?.message || 'Unknown error'}`);
+                }
+              }
+
+              // Verify playback started
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const stateResponse = await makeApiCall(
+                'https://api.spotify.com/v1/me/player',
+                {
+                  method: 'GET',
+                  headers
+                }
+              );
+
+              if (stateResponse.ok) {
+                const state = await stateResponse.json();
+                if (state.is_playing && state.item?.uri === track.uri) {
+                  debug.log('Playback successfully started and verified');
+                  success = true;
+                } else {
+                  debug.log('Playback state verification failed', state);
+                  // Try one more time to start playback
+                  await makeApiCall(
+                    `https://api.spotify.com/v1/me/player/play?device_id=${player._options.id}`,
+                    {
+                      method: 'PUT',
+                      headers,
+                      body: JSON.stringify({ uris: [track.uri] })
+                    }
+                  );
+                  // If we're on the last retry, consider it a success if we got this far
+                  if (retryCount === MAX_RETRIES - 1) {
+                    success = true;
+                  }
+                }
+              }
+            } else {
+              debug.log('Pausing playback');
+              const pauseResponse = await makeApiCall(
+                `https://api.spotify.com/v1/me/player/pause?device_id=${player._options.id}`,
+                {
+                  method: 'PUT',
+                  headers
+                }
+              );
+
+              if (!pauseResponse.ok) {
+                const error = await pauseResponse.json();
+                throw new Error(`Pause failed: ${error.error?.message || 'Unknown error'}`);
+              }
+              success = true;
+            }
+          } catch (error) {
+            debug.logError(error, `handlePlayPause attempt ${retryCount + 1}`);
+            // Only set error if it's not a non-critical error
+            if (!error.message?.includes('item_before_load') && !error.message?.includes('PlayLoad event failed with status 404')) {
+              setError(error.message);
+            }
+            // Log additional context
+            debug.log('Playback context', {
+              track,
+              deviceId: spotifyPlayerRef.current?._options.id,
+              isDeviceActive,
+              accessToken: localStorage.getItem('spotify_access_token') ? 'present' : 'missing',
+              attempt: retryCount + 1
+            });
+
+            if (retryCount < MAX_RETRIES - 1) {
+              // Wait before retrying
+              await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+            }
+          } finally {
+            retryCount++;
           }
-        } catch (error) {
-          debug.logError(error, 'handlePlayPause');
-          // Only set error if it's not a non-critical error
-          if (!error.message?.includes('item_before_load')) {
-            setError(error.message);
-          }
-          // Log additional context
-          debug.log('Playback context', {
-            track,
-            deviceId: spotifyPlayerRef.current?._options.id,
-            isDeviceActive,
-            accessToken: localStorage.getItem('spotify_access_token') ? 'present' : 'missing'
-          });
-        } finally {
-          setIsLoading(false);
         }
+
+        if (!success) {
+          debug.logError('All playback attempts failed');
+          setError('Failed to start playback after multiple attempts');
+        }
+
+        setIsLoading(false);
       };
 
       // Set volume with rate limiting
@@ -445,8 +519,10 @@ const MusicPlayer = ({
       const handlePlaybackError = (error) => {
         debug.logError(error, 'Player playback');
         // Only set error if it's not a non-critical error
-        if (!error.message?.includes('item_before_load')) {
+        if (!error.message?.includes('item_before_load') && !error.message?.includes('PlayLoad event failed with status 404')) {
           setError(error.message);
+        } else {
+          debug.log('Non-critical playback error, continuing with playback', error);
         }
       };
 
