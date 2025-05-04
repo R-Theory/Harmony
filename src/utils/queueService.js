@@ -31,7 +31,7 @@ class QueueService {
     
     // Update Socket.IO configuration
     this.socket = io(socketUrl, {
-      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -39,11 +39,19 @@ class QueueService {
       timeout: 20000,
       autoConnect: true,
       withCredentials: true,
-      path: '/socket.io',
+      path: '/socket.io/',
       forceNew: true,
       upgrade: true,
       rememberUpgrade: true,
-      rejectUnauthorized: false // For development only, remove in production
+      rejectUnauthorized: false,
+      // Add more robust configuration
+      connectTimeout: 45000,
+      upgradeTimeout: 30000,
+      maxHttpBufferSize: 1e8,
+      // Add more detailed error handling
+      perMessageDeflate: {
+        threshold: 1024
+      }
     });
 
     // Set up event listeners
@@ -73,6 +81,13 @@ class QueueService {
       if (this.onError) {
         this.onError('Failed to connect to queue service. Please try refreshing the page.');
       }
+      // Attempt to reconnect with exponential backoff
+      setTimeout(() => {
+        if (!this.isConnected) {
+          console.log('Attempting to reconnect...');
+          this.socket.connect();
+        }
+      }, 5000);
     });
 
     this.socket.on('error', (error) => {
@@ -87,7 +102,10 @@ class QueueService {
       this.isConnected = false;
       if (reason === 'io server disconnect') {
         // The server has forcefully disconnected the socket
-        this.socket.connect();
+        setTimeout(() => {
+          console.log('Attempting to reconnect after server disconnect...');
+          this.socket.connect();
+        }, 5000);
       }
     });
 
@@ -102,6 +120,14 @@ class QueueService {
 
     this.socket.on('reconnect_error', (error) => {
       console.error('Socket reconnection error:', error);
+      // Implement exponential backoff for reconnection attempts
+      const delay = Math.min(1000 * Math.pow(2, this.socket.io.reconnectionAttempts), 30000);
+      setTimeout(() => {
+        if (!this.isConnected) {
+          console.log('Retrying reconnection after error...');
+          this.socket.connect();
+        }
+      }, delay);
     });
 
     this.socket.on('reconnect_failed', () => {
@@ -109,6 +135,13 @@ class QueueService {
       if (this.onError) {
         this.onError('Failed to reconnect to queue service. Please try refreshing the page.');
       }
+      // Final attempt to reconnect after a longer delay
+      setTimeout(() => {
+        if (!this.isConnected) {
+          console.log('Making final reconnection attempt...');
+          this.socket.connect();
+        }
+      }, 10000);
     });
   }
 

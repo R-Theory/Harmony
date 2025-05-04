@@ -66,7 +66,18 @@ const io = new Server(httpServer, {
   allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000,
-  cookie: false
+  cookie: false,
+  // Add more robust configuration
+  connectTimeout: 45000,
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e8,
+  path: '/socket.io/',
+  serveClient: false,
+  // Add more detailed error handling
+  allowUpgrades: true,
+  perMessageDeflate: {
+    threshold: 1024
+  }
 });
 
 // Add more detailed Socket.IO middleware for logging and error handling
@@ -96,6 +107,22 @@ io.engine.on('connection_error', (err) => {
     error: err.message,
     code: err.code,
     context: err.context,
+    time: new Date().toISOString()
+  });
+});
+
+// Add connection state monitoring
+io.engine.on('connection', (socket) => {
+  console.log('New Socket.IO connection established:', {
+    id: socket.id,
+    time: new Date().toISOString()
+  });
+});
+
+// Add disconnection monitoring
+io.engine.on('disconnect', (socket) => {
+  console.log('Socket.IO connection closed:', {
+    id: socket.id,
     time: new Date().toISOString()
   });
 });
