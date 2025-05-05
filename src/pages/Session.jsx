@@ -343,17 +343,14 @@ export default function Session() {
             if (!isPlaying) {
               debug.log('Starting playback for new track');
               setIsPlaying(true);
-            } else {
-              // If we're already playing but the track changed, force a restart
-              debug.log('Restarting playback for new track');
-              setIsPlaying(false);
-              setTimeout(() => setIsPlaying(true), 100);
             }
           }
         } else {
           debug.log('Queue empty, clearing current track');
           setCurrentTrack(null);
           setIsPlaying(false);
+          setProgress(0);
+          setDuration(0);
         }
       },
       (errorMessage) => {
@@ -361,7 +358,7 @@ export default function Session() {
         setError({ message: errorMessage });
       }
     );
-  }, [queueService.socket, currentTrack, isPlaying]);
+  }, [queueService.socket, currentTrack, isPlaying, lastQueueUpdate]);
 
   // Playback control handlers
   const handlePlayPause = () => {
@@ -552,13 +549,35 @@ export default function Session() {
         spotifyPlayerRef.current = spotifyPlayer;
         setSpotifyDeviceId(device_id);
         
-        // Transfer playback to this device with rate limiting
+        // Transfer playback to this device with rate limiting and error handling
         makeSpotifyApiCall('/v1/me/player', {
           method: 'PUT',
-          body: JSON.stringify({ device_ids: [device_id], play: true })
+          body: JSON.stringify({ device_ids: [device_id], play: false }) // Don't start playing immediately
         }).catch(error => {
           if (error.message.includes('404')) {
             debug.log('[Spotify] Cloud Playback API endpoint not found - this is expected');
+          } else if (error.message.includes('500')) {
+            debug.log('[Spotify] Server error during playback transfer - retrying...');
+            // Retry with exponential backoff
+            let retryCount = 0;
+            const maxRetries = 3;
+            const retry = () => {
+              if (retryCount < maxRetries) {
+                const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+                debug.log(`[Spotify] Retrying playback transfer in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+                setTimeout(() => {
+                  retryCount++;
+                  makeSpotifyApiCall('/v1/me/player', {
+                    method: 'PUT',
+                    body: JSON.stringify({ device_ids: [device_id], play: false })
+                  }).catch(e => {
+                    if (retryCount < maxRetries) retry();
+                    else debug.logError('[Spotify] Failed to transfer playback after retries:', e);
+                  });
+                }, delay);
+              }
+            };
+            retry();
           } else {
             debug.logError('[Spotify] Error transferring playback:', error);
           }
@@ -628,12 +647,12 @@ export default function Session() {
       spotifyPlayer.addListener('player_state_changed', state => {
         if (state) {
           debug.log('[Spotify SDK] Player state changed:', state);
-          setIsPlaying(!state.paused);
-          setProgress(state.position);
-          setDuration(state.duration);
-          
-          // Update current track if it's different
+          // Only update isPlaying if we have a track
           if (state.track_window.current_track) {
+            setIsPlaying(!state.paused);
+            setProgress(state.position);
+            setDuration(state.duration);
+            
             const currentTrack = {
               ...state.track_window.current_track,
               title: state.track_window.current_track.name,
@@ -641,6 +660,12 @@ export default function Session() {
               source: 'spotify'
             };
             setCurrentTrack(currentTrack);
+          } else {
+            // If no track, ensure we're not playing
+            setIsPlaying(false);
+            setCurrentTrack(null);
+            setProgress(0);
+            setDuration(0);
           }
         }
       });
