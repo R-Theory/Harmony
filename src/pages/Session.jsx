@@ -560,7 +560,7 @@ export default function Session() {
         // Transfer playback to this device with rate limiting and error handling
         makeSpotifyApiCall('/v1/me/player', {
           method: 'PUT',
-          body: JSON.stringify({ device_ids: [device_id], play: false }) // Don't start playing immediately
+          body: JSON.stringify({ device_ids: [device_id], play: false })
         }).catch(error => {
           if (error.message.includes('404')) {
             debug.log('[Spotify] Cloud Playback API endpoint not found - this is expected');
@@ -650,7 +650,13 @@ export default function Session() {
           }
         }
       });
-      
+
+      // Add progress update listener
+      spotifyPlayer.addListener('progress', ({ position, duration }) => {
+        setProgress(position);
+        setDuration(duration);
+      });
+
       spotifyPlayer.connect();
     } catch (error) {
       debug.logError('[Spotify] Error initializing player:', error);
@@ -722,45 +728,28 @@ export default function Session() {
           const token = localStorage.getItem('spotify_access_token');
           if (window.Spotify && spotifyPlayerRef.current && token) {
             debug.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
-            // Transfer playback to web player
-            fetch('https://api.spotify.com/v1/me/player', {
+            
+            // First ensure we're the active device
+            makeSpotifyApiCall('/v1/me/player', {
               method: 'PUT',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ device_ids: [spotifyDeviceId], play: true })
+              body: JSON.stringify({ device_ids: [spotifyDeviceId], play: false })
             }).then(() => {
               debug.log('[Playback] Successfully transferred playback to web player');
-              // Play the track
-              fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+              
+              // Then start playing the track
+              return makeSpotifyApiCall(`/v1/me/player/play?device_id=${spotifyDeviceId}`, {
                 method: 'PUT',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                },
                 body: JSON.stringify({ uris: [currentTrack.uri] })
-              }).then(() => {
-                debug.log('[Playback] Successfully started playing Spotify track');
-                // Start progress updates
-                const progressInterval = setInterval(() => {
-                  if (spotifyPlayerRef.current) {
-                    spotifyPlayerRef.current.getCurrentState().then(state => {
-                      if (state) {
-                        handleProgressUpdate(state.position, state.duration);
-                      }
-                    });
-                  }
-                }, 1000);
-                return () => clearInterval(progressInterval);
-              }).catch(e => {
-                debug.logError('[Playback] Error playing track:', e);
-                // Try to reconnect the player if there's an error
-                if (spotifyPlayerRef.current) {
-                  spotifyPlayerRef.current.connect();
-                }
               });
-            }).catch(e => debug.logError('[Playback] Error transferring playback:', e));
+            }).then(() => {
+              debug.log('[Playback] Successfully started playing Spotify track');
+            }).catch(error => {
+              debug.logError('[Playback] Error playing track:', error);
+              // Try to reconnect the player if there's an error
+              if (spotifyPlayerRef.current) {
+                spotifyPlayerRef.current.connect();
+              }
+            });
           } else {
             debug.log('[Playback] Spotify SDK not ready or no token:', {
               hasSpotifySDK: !!window.Spotify,
@@ -775,11 +764,6 @@ export default function Session() {
           music.setQueue({ song: currentTrack.appleMusicId }).then(() => {
             music.play();
             debug.log('[MusicKit] Successfully started playing Apple Music track');
-            // Start progress updates
-            const progressInterval = setInterval(() => {
-              handleProgressUpdate(music.currentPlaybackTime * 1000, music.duration * 1000);
-            }, 1000);
-            return () => clearInterval(progressInterval);
           }).catch(e => debug.logError('[MusicKit] Error setting queue:', e));
         }
       } else {
@@ -813,7 +797,7 @@ export default function Session() {
         debug.log('[Playback] No device in session can play this track:', currentTrack);
       }
     }
-  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying, spotifyDeviceId, progress, duration]);
+  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying, spotifyDeviceId]);
 
   // Handle queue updates
   const handleQueueUpdate = (newQueue) => {
