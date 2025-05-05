@@ -431,6 +431,50 @@ export default function Session() {
 
   let spotifyPlayer = null;
 
+  // Add rate limiting for Spotify API calls
+  const [lastApiCall, setLastApiCall] = useState(0);
+  const API_RATE_LIMIT = 1000; // 1 second between API calls
+
+  const makeSpotifyApiCall = async (endpoint, options = {}) => {
+    const now = Date.now();
+    if (now - lastApiCall < API_RATE_LIMIT) {
+      debug.log('[Spotify] Rate limited API call', {
+        timeSinceLastCall: now - lastApiCall,
+        requiredInterval: API_RATE_LIMIT
+      });
+      return new Promise(resolve => setTimeout(resolve, API_RATE_LIMIT - (now - lastApiCall)))
+        .then(() => makeSpotifyApiCall(endpoint, options));
+    }
+
+    setLastApiCall(now);
+    const token = localStorage.getItem('spotify_access_token');
+    if (!token) {
+      throw new Error('No Spotify access token found');
+    }
+
+    const response = await fetch(`https://api.spotify.com${endpoint}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.status === 429) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '5') * 1000;
+      debug.log('[Spotify] Rate limited, retrying after', retryAfter, 'ms');
+      return new Promise(resolve => setTimeout(resolve, retryAfter))
+        .then(() => makeSpotifyApiCall(endpoint, options));
+    }
+
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  };
+
   // Spotify Web Playback SDK loader
   useEffect(() => {
     if (!window.Spotify) {
@@ -508,27 +552,53 @@ export default function Session() {
         spotifyPlayerRef.current = spotifyPlayer;
         setSpotifyDeviceId(device_id);
         
-        // Transfer playback to this device
-        fetch('https://api.spotify.com/v1/me/player', {
+        // Transfer playback to this device with rate limiting
+        makeSpotifyApiCall('/v1/me/player', {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({ device_ids: [device_id], play: true })
-        }).catch(error => debug.logError('[Spotify] Error transferring playback:', error));
+        }).catch(error => {
+          if (error.message.includes('404')) {
+            debug.log('[Spotify] Cloud Playback API endpoint not found - this is expected');
+          } else {
+            debug.logError('[Spotify] Error transferring playback:', error);
+          }
+        });
       });
 
       spotifyPlayer.addListener('not_ready', ({ device_id }) => {
         debug.log('[Spotify SDK] Player not ready', device_id);
-        // Try to reconnect
-        setTimeout(() => spotifyPlayer.connect(), 5000);
+        // Try to reconnect with exponential backoff
+        let retryCount = 0;
+        const maxRetries = 5;
+        const retry = () => {
+          if (retryCount < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+            debug.log(`[Spotify] Retrying connection in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => {
+              retryCount++;
+              spotifyPlayer.connect();
+            }, delay);
+          }
+        };
+        retry();
       });
 
       spotifyPlayer.addListener('initialization_error', e => {
         debug.logError('[Spotify SDK] Init error', e);
-        // Try to reconnect
-        setTimeout(() => spotifyPlayer.connect(), 5000);
+        // Try to reconnect with exponential backoff
+        let retryCount = 0;
+        const maxRetries = 5;
+        const retry = () => {
+          if (retryCount < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+            debug.log(`[Spotify] Retrying initialization in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => {
+              retryCount++;
+              spotifyPlayer.connect();
+            }, delay);
+          }
+        };
+        retry();
       });
 
       spotifyPlayer.addListener('authentication_error', e => {
@@ -536,8 +606,10 @@ export default function Session() {
         // Try to refresh the token
         const refreshToken = localStorage.getItem('spotify_refresh_token');
         if (refreshToken) {
-          fetch(`${window.location.origin}/api/refresh_token?refresh_token=${refreshToken}`)
-            .then(response => response.json())
+          makeSpotifyApiCall('/api/refresh_token', {
+            method: 'POST',
+            body: JSON.stringify({ refresh_token: refreshToken })
+          })
             .then(data => {
               if (data.access_token) {
                 localStorage.setItem('spotify_access_token', data.access_token);
