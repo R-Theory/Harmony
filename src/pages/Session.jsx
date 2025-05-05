@@ -469,7 +469,15 @@ export default function Session() {
       throw new Error(`Spotify API error: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    return response.text().then(text => {
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        debug.log('[Spotify] Empty or invalid JSON response - this is expected');
+        return null;
+      }
+    });
   };
 
   // Spotify Web Playback SDK loader
@@ -553,19 +561,6 @@ export default function Session() {
         makeSpotifyApiCall('/v1/me/player', {
           method: 'PUT',
           body: JSON.stringify({ device_ids: [device_id], play: false }) // Don't start playing immediately
-        }).then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          return response.text().then(text => {
-            if (!text) return null;
-            try {
-              return JSON.parse(text);
-            } catch (e) {
-              debug.log('[Spotify] Empty or invalid JSON response - this is expected');
-              return null;
-            }
-          });
         }).catch(error => {
           if (error.message.includes('404')) {
             debug.log('[Spotify] Cloud Playback API endpoint not found - this is expected');
@@ -583,19 +578,6 @@ export default function Session() {
                   makeSpotifyApiCall('/v1/me/player', {
                     method: 'PUT',
                     body: JSON.stringify({ device_ids: [device_id], play: false })
-                  }).then(response => {
-                    if (!response.ok) {
-                      throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.text().then(text => {
-                      if (!text) return null;
-                      try {
-                        return JSON.parse(text);
-                      } catch (e) {
-                        debug.log('[Spotify] Empty or invalid JSON response - this is expected');
-                        return null;
-                      }
-                    });
                   }).catch(e => {
                     if (retryCount < maxRetries) retry();
                     else debug.logError('[Spotify] Failed to transfer playback after retries:', e);
@@ -610,40 +592,13 @@ export default function Session() {
         });
       });
 
-      spotifyPlayer.addListener('not_ready', ({ device_id }) => {
-        debug.log('[Spotify SDK] Player not ready', device_id);
-        // Try to reconnect with exponential backoff
-        let retryCount = 0;
-        const maxRetries = 5;
-        const retry = () => {
-          if (retryCount < maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
-            debug.log(`[Spotify] Retrying connection in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-            setTimeout(() => {
-              retryCount++;
-              spotifyPlayer.connect();
-            }, delay);
-          }
-        };
-        retry();
-      });
-
+      // Handle Cloud Playback API errors
       spotifyPlayer.addListener('initialization_error', e => {
-        debug.logError('[Spotify SDK] Init error', e);
-        // Try to reconnect with exponential backoff
-        let retryCount = 0;
-        const maxRetries = 5;
-        const retry = () => {
-          if (retryCount < maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
-            debug.log(`[Spotify] Retrying initialization in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-            setTimeout(() => {
-              retryCount++;
-              spotifyPlayer.connect();
-            }, delay);
-          }
-        };
-        retry();
+        if (e.message.includes('404') || e.message.includes('CloudPlaybackClientError')) {
+          debug.log('[Spotify] Cloud Playback API error - this is expected:', e);
+        } else {
+          debug.logError('[Spotify SDK] Init error', e);
+        }
       });
 
       spotifyPlayer.addListener('authentication_error', e => {
