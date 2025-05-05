@@ -338,12 +338,8 @@ export default function Session() {
               newTrack: mappedTrack
             });
             setCurrentTrack(mappedTrack);
-            
-            // If we're not playing, start playback
-            if (!isPlaying) {
-              debug.log('Starting playback for new track');
-              setIsPlaying(true);
-            }
+            // Don't automatically start playback
+            setIsPlaying(false);
           }
         } else {
           debug.log('Queue empty, clearing current track');
