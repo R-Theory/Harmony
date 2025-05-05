@@ -553,6 +553,19 @@ export default function Session() {
         makeSpotifyApiCall('/v1/me/player', {
           method: 'PUT',
           body: JSON.stringify({ device_ids: [device_id], play: false }) // Don't start playing immediately
+        }).then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.text().then(text => {
+            if (!text) return null;
+            try {
+              return JSON.parse(text);
+            } catch (e) {
+              debug.log('[Spotify] Empty or invalid JSON response - this is expected');
+              return null;
+            }
+          });
         }).catch(error => {
           if (error.message.includes('404')) {
             debug.log('[Spotify] Cloud Playback API endpoint not found - this is expected');
@@ -570,6 +583,19 @@ export default function Session() {
                   makeSpotifyApiCall('/v1/me/player', {
                     method: 'PUT',
                     body: JSON.stringify({ device_ids: [device_id], play: false })
+                  }).then(response => {
+                    if (!response.ok) {
+                      throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.text().then(text => {
+                      if (!text) return null;
+                      try {
+                        return JSON.parse(text);
+                      } catch (e) {
+                        debug.log('[Spotify] Empty or invalid JSON response - this is expected');
+                        return null;
+                      }
+                    });
                   }).catch(e => {
                     if (retryCount < maxRetries) retry();
                     else debug.logError('[Spotify] Failed to transfer playback after retries:', e);
