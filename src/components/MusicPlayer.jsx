@@ -477,4 +477,8 @@ MusicPlayer.propTypes = {
   onTrackChange: PropTypes.func
 };
 
+MusicPlayer.defaultProps = {
+  onTrackChange: () => {},
+};
+
 export default MusicPlayer; 
