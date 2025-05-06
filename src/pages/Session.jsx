@@ -645,8 +645,8 @@ export default function Session() {
               duration: state.track_window.current_track.duration_ms
             };
             setCurrentTrack(currentTrack);
-            // Only set isPlaying to true if we're actually playing
-            setIsPlaying(!state.paused && state.track_window.current_track);
+            // Only set isPlaying to true if we have a track AND we're not paused AND we have a playback device
+            setIsPlaying(!state.paused && selectedPlaybackDevice !== null);
             setProgress(state.position);
             setDuration(state.duration);
           } else {
@@ -732,7 +732,7 @@ export default function Session() {
     }
 
     // Only proceed if we have a valid track and we're trying to play it
-    if (!isPlaying) {
+    if (isPlaying === false) {
       debug.log('[Playback] Not playing, skipping playback initialization');
       return;
     }
