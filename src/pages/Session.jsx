@@ -828,7 +828,23 @@ export default function Session() {
   const handleAddToQueue = async (track) => {
     try {
       debug.log('[DEBUG][Session][queueService] Song added to queue:', track);
+      const isFirstTrack = queue.length === 0;
       await queueService.addToQueue(track);
+      
+      if (isFirstTrack && track.source === 'spotify' && spotifyPlayerRef.current) {
+        debug.log('[DEBUG][Session] First track added, handling sequence');
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await spotifyPlayerRef.current.skipToNext();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await spotifyPlayerRef.current.pause();
+          setIsPlaying(false);
+          debug.log('[DEBUG][Session] First track sequence completed');
+        } catch (error) {
+          debug.logError('[DEBUG][Session] Error in first track sequence:', error);
+        }
+      }
+      
       showQueueNotification(`Added "${track.name}" to session queue`);
     } catch (error) {
       showQueueNotification(error.message, 'error');
