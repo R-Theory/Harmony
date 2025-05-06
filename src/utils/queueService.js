@@ -214,7 +214,12 @@ class QueueService {
   }
 
   setCallbacks(onQueueUpdate, onError) {
-    this.onQueueUpdate = onQueueUpdate;
+    this.onQueueUpdate = async (queue) => {
+      if (onQueueUpdate) {
+        await this.syncQueueWithSpotify(queue);
+        onQueueUpdate(queue);
+      }
+    };
     this.onError = onError;
   }
 
@@ -231,7 +236,21 @@ class QueueService {
       sessionId: this.sessionId
     });
     try {
-      // Only emit to backend (app-managed queue)
+      // Add to Spotify queue if it's a Spotify track
+      if (track.source === 'spotify') {
+        const accessToken = localStorage.getItem('spotify_access_token');
+        if (accessToken) {
+          try {
+            await spotifyAddToQueue(track.uri, accessToken);
+            console.log('Spotify: Track added to Spotify queue');
+          } catch (spotifyError) {
+            console.error('Spotify: Error adding to queue:', spotifyError);
+            // Continue with app-managed queue even if Spotify queue fails
+          }
+        }
+      }
+
+      // Add to app-managed queue
       this.socket.emit('add-to-queue', {
         sessionId: this.sessionId,
         track
@@ -256,7 +275,26 @@ class QueueService {
       sessionId: this.sessionId
     });
     try {
-      // Only emit to backend (app-managed queue)
+      // Remove from Spotify queue if it's a Spotify track
+      if (track.source === 'spotify') {
+        const accessToken = localStorage.getItem('spotify_access_token');
+        if (accessToken) {
+          try {
+            // Since Spotify doesn't support direct queue removal,
+            // we'll skip to the next track if this is the current track
+            const state = await spotifyPlayerRef?.current?.getCurrentState();
+            if (state?.track_window?.current_track?.uri === track.uri) {
+              await skipToNext(accessToken);
+              console.log('Spotify: Skipped current track');
+            }
+          } catch (spotifyError) {
+            console.error('Spotify: Error removing from queue:', spotifyError);
+            // Continue with app-managed queue even if Spotify queue fails
+          }
+        }
+      }
+
+      // Remove from app-managed queue
       this.socket.emit('remove-from-queue', {
         sessionId: this.sessionId,
         trackUri: track.uri
@@ -276,6 +314,37 @@ class QueueService {
     this.socket.emit('get-queue', {
       sessionId: this.sessionId
     });
+  }
+
+  async syncQueueWithSpotify(queue) {
+    if (!queue || queue.length === 0) return;
+
+    const accessToken = localStorage.getItem('spotify_access_token');
+    if (!accessToken) {
+      console.log('Spotify: No access token available for queue sync');
+      return;
+    }
+
+    try {
+      // Get current Spotify queue
+      const { queue: spotifyQueue } = await getQueue(accessToken);
+      
+      // Add any tracks from our queue that aren't in Spotify's queue
+      for (const track of queue) {
+        if (track.source === 'spotify' && !spotifyQueue.some(qt => qt.uri === track.uri)) {
+          try {
+            await spotifyAddToQueue(track.uri, accessToken);
+            console.log('Spotify: Synced track to queue:', track.name);
+            // Add a small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error) {
+            console.error('Spotify: Error syncing track:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Spotify: Error syncing queue:', error);
+    }
   }
 }
 
