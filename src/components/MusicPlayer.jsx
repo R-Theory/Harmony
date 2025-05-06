@@ -359,6 +359,44 @@ const MusicPlayer = ({
     }
   }, [track, isPlaying, volume, appleMusicUserToken, onProgressUpdate]);
 
+  // Handle track changes
+  useEffect(() => {
+    const loadTrack = async () => {
+      if (!track || !spotifyPlayerRef.current) return;
+
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Ensure device is active
+        const isActive = await checkActiveDevice();
+        if (!isActive) {
+          debug.log('Device not active, activating...');
+          const activated = await activateDevice();
+          if (!activated) {
+            throw new Error('Failed to activate device');
+          }
+        }
+
+        debug.log('Loading new track', { track });
+        await spotifyPlayerRef.current.load(track.uri);
+        
+        // If we should be playing, start playback
+        if (isPlaying) {
+          debug.log('Starting playback for new track');
+          await spotifyPlayerRef.current.resume();
+        }
+      } catch (error) {
+        debug.logError(error, 'Error loading track');
+        setError(error.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTrack();
+  }, [track?.uri]); // Only reload when the track URI changes
+
   // Handle play/pause
   const handlePlayPause = async () => {
     if (isLoading) {
@@ -398,8 +436,12 @@ const MusicPlayer = ({
       lastCommandTime.current = Date.now();
 
       if (!state || state.paused) {
+        debug.log('Resuming playback');
         await player.resume();
+        // Wait a bit for playback to start
+        await new Promise(resolve => setTimeout(resolve, 500));
       } else {
+        debug.log('Pausing playback');
         await player.pause();
       }
 
