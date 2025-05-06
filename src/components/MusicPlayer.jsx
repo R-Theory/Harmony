@@ -374,22 +374,37 @@ const MusicPlayer = ({
         throw new Error('No Spotify player instance');
       }
 
+      // Ensure device is active
+      const isActive = await checkActiveDevice();
+      if (!isActive) {
+        debug.log('Device not active, activating...');
+        const activated = await activateDevice();
+        if (!activated) {
+          throw new Error('Failed to activate device');
+        }
+      }
+
       // Get current state
       const state = await player.getCurrentState();
-      if (!state) {
-        throw new Error('Could not get player state');
+      
+      // If we have a track but it's not loaded, load it first
+      if (track && (!state || state.track_window?.current_track?.uri !== track.uri)) {
+        debug.log('Loading track before playing', { track });
+        await player.load(track.uri);
+        // Wait a bit for the track to load
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       lastCommandTime.current = Date.now();
 
-      if (state.paused) {
+      if (!state || state.paused) {
         await player.resume();
       } else {
         await player.pause();
       }
 
       // Update local state
-      onPlayPause(!state.paused);
+      onPlayPause(!state?.paused);
     } catch (error) {
       debug.logError(error, 'Error in play/pause');
       setError(error.message);
