@@ -645,7 +645,8 @@ export default function Session() {
               duration: state.track_window.current_track.duration_ms
             };
             setCurrentTrack(currentTrack);
-            setIsPlaying(!state.paused);
+            // Only set isPlaying to true if we're actually playing
+            setIsPlaying(!state.paused && state.track_window.current_track);
             setProgress(state.position);
             setDuration(state.duration);
           } else {
@@ -655,6 +656,12 @@ export default function Session() {
             setProgress(0);
             setDuration(0);
           }
+        } else {
+          // If no state, ensure we're not playing
+          setIsPlaying(false);
+          setCurrentTrack(null);
+          setProgress(0);
+          setDuration(0);
         }
       });
 
@@ -769,29 +776,19 @@ export default function Session() {
             if (spotifyPlayerRef.current) {
               spotifyPlayerRef.current.connect();
             }
-            setIsPlaying(false);
+            setIsPlaying(false); // Ensure isPlaying is false on error
           });
         } else {
           debug.log('[Playback] Spotify SDK not ready or no token:', {
             hasSpotifySDK: !!window.Spotify,
             hasPlayerRef: !!spotifyPlayerRef.current,
-            hasToken: !!token,
-            deviceId: spotifyDeviceId
+            hasToken: !!token
           });
           setIsPlaying(false);
         }
-      } else if (currentTrack.source === 'appleMusic' && appleMusicUserToken) {
-        debug.log('[Playback] Playing Apple Music track:', currentTrack.appleMusicId);
-        const music = window.MusicKit.getInstance();
-        music.setQueue({ song: currentTrack.appleMusicId }).then(() => {
-          music.play();
-          debug.log('[MusicKit] Successfully started playing Apple Music track');
-        }).catch(e => debug.logError('[MusicKit] Error setting queue:', e));
       }
-    } else {
-      debug.log('[Playback] Another device will play the track:', selectedPlaybackDevice);
     }
-  }, [currentTrack, selectedPlaybackDevice, userId, spotifyReady, appleMusicUserToken, isPlaying, spotifyDeviceId]);
+  }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyDeviceId, userId]);
 
   // Handle queue updates
   const handleQueueUpdate = (newQueue) => {
