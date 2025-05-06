@@ -18,6 +18,27 @@ export default function usePlaybackController({
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Update currentTrack when initialTrack changes
+  useEffect(() => {
+    debug.log('Track changed', { previousTrack: currentTrack, newTrack: initialTrack });
+    setCurrentTrack(initialTrack);
+    // Reset playback state when track changes
+    if (initialTrack) {
+      setProgress(0);
+      setDuration(initialTrack.duration_ms || 0);
+    } else {
+      setProgress(0);
+      setDuration(0);
+      setIsPlaying(false);
+    }
+  }, [initialTrack]);
+
+  // Update isPlaying when initialIsPlaying changes
+  useEffect(() => {
+    debug.log('Playback state changed', { previousState: isPlaying, newState: initialIsPlaying });
+    setIsPlaying(initialIsPlaying);
+  }, [initialIsPlaying]);
+
   useEffect(() => {
     debug.log('Playback state changed', {
       currentTrack,
@@ -45,7 +66,7 @@ export default function usePlaybackController({
       setIsPlaying(false);
       return;
     }
-    setIsPlaying((prev) => !prev);
+    setIsPlaying(prev => !prev);
   }, [currentTrack]);
 
   // Seek handler
@@ -55,7 +76,7 @@ export default function usePlaybackController({
     // Add Spotify/Apple seek logic here if needed
   }, []);
 
-  // Skip next/previous handlers (to be implemented as needed)
+  // Skip next/previous handlers
   const handleSkipNext = useCallback(() => {
     debug.log('Skip next called');
     // Implement skip next logic

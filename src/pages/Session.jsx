@@ -720,19 +720,6 @@ export default function Session() {
       return;
     }
 
-    // Initialize isPlaying to false if it's undefined
-    if (isPlaying === undefined) {
-      debug.log('[Playback] isPlaying is undefined, initializing to false');
-      setIsPlaying(false);
-      return;
-    }
-
-    // Only proceed if we have a valid track and we're trying to play it
-    if (isPlaying === false) {
-      debug.log('[Playback] Not playing, skipping playback initialization');
-      return;
-    }
-
     const canPlay = (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) ||
       (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic);
     
@@ -765,6 +752,7 @@ export default function Session() {
             });
           }).then(() => {
             debug.log('[Playback] Successfully started playing Spotify track');
+            setIsPlaying(true); // Set isPlaying to true after successful playback start
           }).catch(error => {
             debug.logError('[Playback] Error playing track:', error);
             // Try to reconnect the player if there's an error
@@ -783,7 +771,7 @@ export default function Session() {
         }
       }
     }
-  }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyDeviceId, userId]);
+  }, [currentTrack, selectedPlaybackDevice, spotifyDeviceId, userId]);
 
   // Handle queue updates
   const handleQueueUpdate = (newQueue) => {
