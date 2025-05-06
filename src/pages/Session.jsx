@@ -493,47 +493,9 @@ export default function Session() {
 
   // Initialize Spotify Player when ready
   useEffect(() => {
-    if (spotifyReady && !spotifyPlayerRef.current) {
-      const token = localStorage.getItem('spotify_access_token');
-      if (!token) {
-        debug.logError('[Spotify] No access token found');
-        return;
-      }
-
-      // Check if token is expired
-      const tokenExpiry = localStorage.getItem('spotify_token_expiry');
-      if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {
-        debug.log('[Spotify] Token expired, attempting to refresh...');
-        const refreshToken = localStorage.getItem('spotify_refresh_token');
-        if (refreshToken) {
-          fetch(`${window.location.origin}/api/refresh_token?refresh_token=${refreshToken}`)
-            .then(response => response.json())
-            .then(data => {
-              if (data.access_token) {
-                localStorage.setItem('spotify_access_token', data.access_token);
-                localStorage.setItem('spotify_token_expiry', (Date.now() + 3600000).toString());
-                initializeSpotifyPlayer(data.access_token);
-              } else {
-                debug.logError('[Spotify] Failed to refresh token');
-                localStorage.removeItem('spotify_access_token');
-                localStorage.removeItem('spotify_refresh_token');
-                localStorage.removeItem('spotify_connected');
-              }
-            })
-            .catch(error => {
-              debug.logError('[Spotify] Error refreshing token:', error);
-              localStorage.removeItem('spotify_access_token');
-              localStorage.removeItem('spotify_refresh_token');
-              localStorage.removeItem('spotify_connected');
-            });
-        } else {
-          debug.logError('[Spotify] No refresh token found');
-          localStorage.removeItem('spotify_access_token');
-          localStorage.removeItem('spotify_connected');
-        }
-        return;
-      }
-
+    const token = localStorage.getItem('spotify_access_token');
+    if (token && !spotifyPlayerRef.current && !spotifyReady) {
+      debug.log('Initializing Spotify player');
       initializeSpotifyPlayer(token);
     }
   }, [spotifyReady]);
@@ -704,7 +666,7 @@ export default function Session() {
     }
   };
 
-  // Update the playback effect to be more strict about when to initialize
+  // Handle playback state
   useEffect(() => {
     debug.log('[DEBUG] Playback effect triggered');
     debug.log('[DEBUG] currentTrack:', currentTrack);
@@ -714,64 +676,45 @@ export default function Session() {
     debug.log('[DEBUG] progress:', progress);
     debug.log('[DEBUG] duration:', duration);
 
+    // Don't proceed if session is not fully initialized
+    if (!spotifyReady || !selectedPlaybackDevice) {
+      debug.log('[Playback] Session not fully initialized');
+      return;
+    }
+
+    // Don't proceed if there's no track or device
     if (!currentTrack || !selectedPlaybackDevice) {
       debug.log('[Playback] No current track or selected device:', { currentTrack, selectedPlaybackDevice });
-      setIsPlaying(false); // Ensure isPlaying is false when no track
       return;
     }
 
-    const canPlay = (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) ||
-      (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic);
-    
+    // Check if the selected device can play the track
+    const canPlay = currentTrack.source === 'spotify' ? selectedPlaybackDevice.hasSpotify : selectedPlaybackDevice.hasAppleMusic;
     debug.log('[Playback] Can play track:', { canPlay, trackSource: currentTrack.source, deviceCapabilities: selectedPlaybackDevice });
-    
+
     if (!canPlay) {
-      setIsPlaying(false); // Ensure isPlaying is false if we can't play
+      debug.log('[Playback] Selected device cannot play this track');
       return;
     }
 
-    if (selectedPlaybackDevice.id === userId) {
+    // Initialize isPlaying if undefined
+    if (isPlaying === undefined) {
+      setIsPlaying(false);
+      return;
+    }
+
+    // Handle Spotify playback
+    if (currentTrack.source === 'spotify' && spotifyDeviceId) {
       debug.log('[Playback] This device will play the track');
-      if (currentTrack.source === 'spotify' && spotifyDeviceId) {
-        // Play Spotify track using SDK
-        const token = localStorage.getItem('spotify_access_token');
-        if (window.Spotify && spotifyPlayerRef.current && token) {
-          debug.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
-          
-          // First ensure we're the active device
-          makeSpotifyApiCall('/v1/me/player', {
-            method: 'PUT',
-            body: JSON.stringify({ device_ids: [spotifyDeviceId], play: false })
-          }).then(() => {
-            debug.log('[Playback] Successfully transferred playback to web player');
-            
-            // Then start playing the track
-            return makeSpotifyApiCall(`/v1/me/player/play?device_id=${spotifyDeviceId}`, {
-              method: 'PUT',
-              body: JSON.stringify({ uris: [currentTrack.uri] })
-            });
-          }).then(() => {
-            debug.log('[Playback] Successfully started playing Spotify track');
-            setIsPlaying(true); // Set isPlaying to true after successful playback start
-          }).catch(error => {
-            debug.logError('[Playback] Error playing track:', error);
-            // Try to reconnect the player if there's an error
-            if (spotifyPlayerRef.current) {
-              spotifyPlayerRef.current.connect();
-            }
-            setIsPlaying(false); // Ensure isPlaying is false on error
-          });
-        } else {
-          debug.log('[Playback] Spotify SDK not ready or no token:', {
-            hasSpotifySDK: !!window.Spotify,
-            hasPlayerRef: !!spotifyPlayerRef.current,
-            hasToken: !!token
-          });
-          setIsPlaying(false);
-        }
+      if (isPlaying) {
+        debug.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
+        spotifyPlayerRef.current?.play();
+      } else {
+        debug.log('[Playback] Pausing Spotify track');
+        spotifyPlayerRef.current?.pause();
       }
     }
-  }, [currentTrack, selectedPlaybackDevice, spotifyDeviceId, userId]);
+  }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyDeviceId, spotifyReady]);
 
   // Handle queue updates
   const handleQueueUpdate = (newQueue) => {

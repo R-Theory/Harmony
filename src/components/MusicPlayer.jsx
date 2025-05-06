@@ -35,25 +35,10 @@ const MusicPlayer = ({
   const [lastApiCall, setLastApiCall] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentTrack, setCurrentTrack] = useState(track);
+  const [currentTrack, setCurrentTrack] = useState(null);
 
   // Rate limiting configuration based on Spotify API limits
-  const RATE_LIMIT = {
-    // Player endpoints (play, pause, seek, etc.) - 50 requests per second
-    playerControl: 20, // 20ms between requests (50 requests per second)
-    
-    // Device endpoints (transfer playback, get devices) - 20 requests per second
-    deviceControl: 50, // 50ms between requests (20 requests per second)
-    
-    // Volume control - 20 requests per second
-    volumeControl: 50, // 50ms between requests (20 requests per second)
-    
-    // Queue endpoints - 20 requests per second
-    queueControl: 50, // 50ms between requests (20 requests per second)
-    
-    // General endpoints (get player state, etc.) - 20 requests per second
-    general: 50, // 50ms between requests (20 requests per second)
-  };
+  const RATE_LIMIT = 1000; // 1 second between API calls
 
   const checkRateLimit = (endpoint) => {
     const now = Date.now();
@@ -243,14 +228,9 @@ const MusicPlayer = ({
       const accessToken = localStorage.getItem('spotify_access_token');
 
       if (!accessToken) {
-        debug.logError('No access token found');
+        debug.log('No Spotify access token found');
         return;
       }
-
-      const headers = {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      };
 
       const handlePlayerStateChanged = (state) => {
         debug.log('Player state changed', {
@@ -268,8 +248,8 @@ const MusicPlayer = ({
           onProgressUpdate(state.position, state.duration);
         }
 
-        // Update playing state
-        setIsPlaying(!state.paused);
+        // Update playing state through callback
+        onPlayPause(!state.paused);
 
         // Check if track changed
         if (state.track_window?.current_track?.uri !== currentTrack?.uri) {
@@ -396,7 +376,7 @@ const MusicPlayer = ({
       }
 
       // Update local state
-      setIsPlaying(!state.paused);
+      onPlayPause(!state.paused);
     } catch (error) {
       debug.logError(error, 'handlePlayPause');
       setError(error.message);
