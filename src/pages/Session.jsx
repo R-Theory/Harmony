@@ -343,8 +343,10 @@ export default function Session() {
                 await spotifyPlayerRef.current.pause();
                 // Wait a moment for the pause to take effect
                 await new Promise(resolve => setTimeout(resolve, 500));
-                // Skip to the next track (our queued track)
-                await spotifyPlayerRef.current.skipToNext();
+                // Load and play the track
+                await spotifyPlayerRef.current.play({
+                  uris: [mappedTrack.uri]
+                });
                 // Wait for the track to load
                 await new Promise(resolve => setTimeout(resolve, 500));
                 // Ensure it's paused
