@@ -306,7 +306,7 @@ export default function Session() {
     if (!queueService.socket) return;
 
     queueService.setCallbacks(
-      (updatedQueue) => {
+      async (updatedQueue) => {
         const now = Date.now();
         if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL) {
           debug.log('Queue update rate limited', {
@@ -338,13 +338,20 @@ export default function Session() {
             // If this is the first track in the queue, skip current track and pause
             if (updatedQueue.length === 1 && spotifyPlayerRef.current) {
               debug.log('[DEBUG][Session] First track added, skipping current track and pausing');
-              spotifyPlayerRef.current.load(mappedTrack.uri).then(() => {
-                // Ensure the track is paused
-                spotifyPlayerRef.current.pause();
+              try {
+                // First pause any current playback
+                await spotifyPlayerRef.current.pause();
+                // Then play the new track
+                await spotifyPlayerRef.current.play({
+                  uris: [mappedTrack.uri]
+                });
+                // Immediately pause it
+                await spotifyPlayerRef.current.pause();
                 setIsPlaying(false);
-              }).catch(error => {
+                debug.log('[DEBUG][Session] First track loaded and paused successfully');
+              } catch (error) {
                 debug.logError('[DEBUG][Session] Error loading first track:', error);
-              });
+              }
             }
           }
         } else {
