@@ -342,8 +342,8 @@ export default function Session() {
               newTrack: mappedTrack
             });
             setCurrentTrack(mappedTrack);
-            // Don't automatically start playback
-            setIsPlaying(false);
+            // Set isPlaying to true when a new track is loaded
+            setIsPlaying(true);
           }
         } else {
           debug.log('Queue empty, clearing current track');
