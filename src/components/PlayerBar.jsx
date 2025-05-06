@@ -185,7 +185,7 @@ const PlayerBar = ({
                 {currentTrack?.name || 'No track selected'}
               </Typography>
               <Typography variant="body2" color="textSecondary" noWrap>
-                {currentTrack?.artist || 'No artist'}
+                {currentTrack?.artists?.map(artist => artist.name).join(', ') || 'No artist'}
               </Typography>
             </Box>
           </Box>

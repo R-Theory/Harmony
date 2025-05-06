@@ -428,18 +428,50 @@ const MusicPlayer = ({
       // If we have a track but it's not loaded, load it first
       if (track && (!state || state.track_window?.current_track?.uri !== track.uri)) {
         debug.log('Loading track before playing', { track });
-        await player.load(track.uri);
-        // Wait a bit for the track to load
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          await player.load(track.uri);
+          // Wait a bit for the track to load
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (error) {
+          debug.logError(error, 'Error loading track');
+          // If we get a 404, try to refresh the token
+          if (error.message?.includes('404')) {
+            const accessToken = localStorage.getItem('spotify_access_token');
+            if (accessToken) {
+              debug.log('Refreshing Spotify token');
+              // Force token refresh by clearing it
+              localStorage.removeItem('spotify_access_token');
+              window.location.reload();
+              return;
+            }
+          }
+          throw error;
+        }
       }
 
       lastCommandTime.current = Date.now();
 
       if (!state || state.paused) {
         debug.log('Resuming playback');
-        await player.resume();
-        // Wait a bit for playback to start
-        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+          await player.resume();
+          // Wait a bit for playback to start
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          debug.logError(error, 'Error resuming playback');
+          // If we get a 404, try to refresh the token
+          if (error.message?.includes('404')) {
+            const accessToken = localStorage.getItem('spotify_access_token');
+            if (accessToken) {
+              debug.log('Refreshing Spotify token');
+              // Force token refresh by clearing it
+              localStorage.removeItem('spotify_access_token');
+              window.location.reload();
+              return;
+            }
+          }
+          throw error;
+        }
       } else {
         debug.log('Pausing playback');
         await player.pause();
