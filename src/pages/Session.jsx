@@ -342,8 +342,7 @@ export default function Session() {
               newTrack: mappedTrack
             });
             setCurrentTrack(mappedTrack);
-            // Set isPlaying to true when a new track is loaded
-            setIsPlaying(true);
+            // Don't automatically set isPlaying - let the Spotify player state handle it
           }
         } else {
           debug.log('Queue empty, clearing current track');
