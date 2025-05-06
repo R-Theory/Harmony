@@ -335,22 +335,24 @@ export default function Session() {
             debug.log('[DEBUG][Session][currentTrack] Current track set/changed:', mappedTrack);
             setCurrentTrack(mappedTrack);
 
-            // If this is the first track in the queue, skip current track and pause
+            // If this is the first track in the queue, handle the sequence
             if (updatedQueue.length === 1 && spotifyPlayerRef.current) {
-              debug.log('[DEBUG][Session] First track added, skipping current track and pausing');
+              debug.log('[DEBUG][Session] First track added, handling sequence');
               try {
                 // First pause any current playback
                 await spotifyPlayerRef.current.pause();
-                // Then play the new track
-                await spotifyPlayerRef.current.play({
-                  uris: [mappedTrack.uri]
-                });
-                // Immediately pause it
+                // Wait a moment for the pause to take effect
+                await new Promise(resolve => setTimeout(resolve, 500));
+                // Skip to the next track (our queued track)
+                await spotifyPlayerRef.current.skipToNext();
+                // Wait for the track to load
+                await new Promise(resolve => setTimeout(resolve, 500));
+                // Ensure it's paused
                 await spotifyPlayerRef.current.pause();
                 setIsPlaying(false);
-                debug.log('[DEBUG][Session] First track loaded and paused successfully');
+                debug.log('[DEBUG][Session] First track sequence completed');
               } catch (error) {
-                debug.logError('[DEBUG][Session] Error loading first track:', error);
+                debug.logError('[DEBUG][Session] Error in first track sequence:', error);
               }
             }
           }
