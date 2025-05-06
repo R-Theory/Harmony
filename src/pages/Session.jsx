@@ -363,37 +363,63 @@ export default function Session() {
     try {
       const player = spotifyPlayerRef.current;
       if (!player) {
+        debug.logError('No Spotify player instance found');
         throw new Error('No Spotify player instance');
       }
 
       // Get current state
+      debug.log('[DEBUG][Session] Getting current player state');
       const state = await player.getCurrentState();
+      debug.log('[DEBUG][Session] Current player state:', state);
       
       // If we have a track but it's not loaded, load it first
       if (currentTrack && (!state || state.track_window?.current_track?.uri !== currentTrack.uri)) {
-        debug.log('Loading track before playing', { currentTrack });
-        await player.load(currentTrack.uri);
-        // Wait a bit for the track to load
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        debug.log('[DEBUG][Session] Loading track before playing', { 
+          currentTrackUri: currentTrack.uri,
+          currentStateUri: state?.track_window?.current_track?.uri 
+        });
+        try {
+          await player.load(currentTrack.uri);
+          debug.log('[DEBUG][Session] Track loaded successfully');
+          // Wait a bit for the track to load
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          debug.log('[DEBUG][Session] Finished waiting for track load');
+        } catch (loadError) {
+          debug.logError('[DEBUG][Session] Error loading track:', loadError);
+          throw loadError;
+        }
       }
 
       if (!state || state.paused) {
-        debug.log('Resuming playback');
-        await player.resume();
+        debug.log('[DEBUG][Session] Attempting to resume playback');
+        try {
+          await player.resume();
+          debug.log('[DEBUG][Session] Playback resumed successfully');
+        } catch (resumeError) {
+          debug.logError('[DEBUG][Session] Error resuming playback:', resumeError);
+          throw resumeError;
+        }
       } else {
-        debug.log('Pausing playback');
-        await player.pause();
+        debug.log('[DEBUG][Session] Attempting to pause playback');
+        try {
+          await player.pause();
+          debug.log('[DEBUG][Session] Playback paused successfully');
+        } catch (pauseError) {
+          debug.logError('[DEBUG][Session] Error pausing playback:', pauseError);
+          throw pauseError;
+        }
       }
 
       // Update UI state
       setIsPlaying(prev => !prev);
+      debug.log('[DEBUG][Session] UI state updated', { newIsPlaying: !isPlaying });
     } catch (error) {
-      debug.logError(error, 'Error in play/pause');
+      debug.logError('[DEBUG][Session] Error in play/pause:', error);
       // If we get a 404, try to refresh the token
       if (error.message?.includes('404')) {
         const accessToken = localStorage.getItem('spotify_access_token');
         if (accessToken) {
-          debug.log('Refreshing Spotify token');
+          debug.log('[DEBUG][Session] Refreshing Spotify token due to 404 error');
           // Force token refresh by clearing it
           localStorage.removeItem('spotify_access_token');
           window.location.reload();
