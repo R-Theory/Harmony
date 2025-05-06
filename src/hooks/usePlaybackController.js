@@ -19,6 +19,7 @@ export default function usePlaybackController({
   const [isLoading, setIsLoading] = useState(false);
   const stateUpdateTimeout = useRef(null);
   const [isSeeking, setIsSeeking] = useState(false);
+  const isStateUpdateInProgress = useRef(false);
 
   // Update currentTrack when initialTrack changes
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function usePlaybackController({
   // Update isPlaying when initialIsPlaying changes
   useEffect(() => {
     debug.log('Playback state changed', { previousState: isPlaying, newState: initialIsPlaying });
-    if (initialIsPlaying !== isPlaying) {
+    if (initialIsPlaying !== isPlaying && !isStateUpdateInProgress.current) {
       setIsPlaying(initialIsPlaying);
     }
   }, [initialIsPlaying]);
@@ -88,7 +89,13 @@ export default function usePlaybackController({
       return;
     }
 
+    if (isStateUpdateInProgress.current) {
+      debug.log('State update already in progress, ignoring play/pause request');
+      return;
+    }
+
     try {
+      isStateUpdateInProgress.current = true;
       setIsLoading(true);
       const player = spotifyPlayerRef?.current;
       if (player) {
@@ -111,6 +118,7 @@ export default function usePlaybackController({
       // Don't update isPlaying state on error
     } finally {
       setIsLoading(false);
+      isStateUpdateInProgress.current = false;
     }
   }, [currentTrack, isPlaying, spotifyPlayerRef]);
 
@@ -122,7 +130,13 @@ export default function usePlaybackController({
       return;
     }
 
+    if (isStateUpdateInProgress.current) {
+      debug.log('State update already in progress, ignoring seek request');
+      return;
+    }
+
     try {
+      isStateUpdateInProgress.current = true;
       setIsLoading(true);
       const player = spotifyPlayerRef?.current;
       if (player) {
@@ -138,6 +152,7 @@ export default function usePlaybackController({
       setError(error.message);
     } finally {
       setIsLoading(false);
+      isStateUpdateInProgress.current = false;
     }
   }, [currentTrack, spotifyPlayerRef]);
 
@@ -159,7 +174,13 @@ export default function usePlaybackController({
       return;
     }
 
+    if (isStateUpdateInProgress.current) {
+      debug.log('State update already in progress, ignoring volume change request');
+      return;
+    }
+
     try {
+      isStateUpdateInProgress.current = true;
       setIsLoading(true);
       const player = spotifyPlayerRef?.current;
       if (player) {
@@ -175,6 +196,7 @@ export default function usePlaybackController({
       setError(error.message);
     } finally {
       setIsLoading(false);
+      isStateUpdateInProgress.current = false;
     }
   }, [currentTrack, spotifyPlayerRef]);
 
