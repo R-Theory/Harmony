@@ -200,16 +200,16 @@ const PlayerBar = ({
           {currentTrack && (
             <Box display="flex" alignItems="center">
               <Avatar
-                src={currentTrack.album?.images?.[0]?.url}
-                alt={currentTrack.name}
+                src={currentTrack.album?.images?.[0]?.url || currentTrack.albumArt}
+                alt={currentTrack.name || currentTrack.title}
                 sx={{ width: 56, height: 56, mr: 2 }}
               />
               <Box>
                 <Typography variant="subtitle1" noWrap>
-                  {currentTrack.name}
+                  {currentTrack.name || currentTrack.title}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" noWrap>
-                  {currentTrack.artists?.map(artist => artist.name).join(', ')}
+                  {currentTrack.artists?.map(artist => artist.name).join(', ') || currentTrack.artist}
                 </Typography>
               </Box>
             </Box>

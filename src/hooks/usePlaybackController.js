@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import DebugLogger from '../utils/debug';
 
 const debug = new DebugLogger('usePlaybackController');
@@ -77,22 +77,50 @@ export default function usePlaybackController({
   }, []);
 
   // Play/pause handler
-  const handlePlayPause = useCallback(() => {
+  const handlePlayPause = useCallback(async () => {
     debug.log('Play/Pause toggled', { currentTrack, isPlaying });
     if (!currentTrack) {
       debug.log('No track to play/pause, setting isPlaying to false');
       setIsPlaying(false);
       return;
     }
-    setIsPlaying(prev => !prev);
-  }, [currentTrack]);
+
+    try {
+      setIsLoading(true);
+      const player = spotifyPlayerRef?.current;
+      if (player) {
+        if (isPlaying) {
+          await player.pause();
+        } else {
+          await player.resume();
+        }
+      }
+      setIsPlaying(prev => !prev);
+    } catch (error) {
+      debug.logError(error, 'handlePlayPause');
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentTrack, isPlaying, spotifyPlayerRef]);
 
   // Seek handler
   const handleSeek = useCallback(async (position) => {
     debug.log('Seek called', { position });
-    setProgress(position);
-    // Add Spotify/Apple seek logic here if needed
-  }, []);
+    try {
+      setIsLoading(true);
+      const player = spotifyPlayerRef?.current;
+      if (player) {
+        await player.seek(position);
+      }
+      setProgress(position);
+    } catch (error) {
+      debug.logError(error, 'handleSeek');
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [spotifyPlayerRef]);
 
   // Skip next/previous handlers
   const handleSkipNext = useCallback(() => {
@@ -105,11 +133,22 @@ export default function usePlaybackController({
   }, []);
 
   // Volume change handler
-  const handleVolumeChange = useCallback((newVolume) => {
+  const handleVolumeChange = useCallback(async (newVolume) => {
     debug.log('Volume changed', { newVolume });
-    setVolume(newVolume);
-    // Add Spotify/Apple volume logic here if needed
-  }, []);
+    try {
+      setIsLoading(true);
+      const player = spotifyPlayerRef?.current;
+      if (player) {
+        await player.setVolume(newVolume / 100);
+      }
+      setVolume(newVolume);
+    } catch (error) {
+      debug.logError(error, 'handleVolumeChange');
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [spotifyPlayerRef]);
 
   return {
     currentTrack,

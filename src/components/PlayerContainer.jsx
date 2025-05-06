@@ -10,11 +10,11 @@ const PlayerContainer = ({
   currentTrack: initialTrack,
   selectedPlaybackDevice,
   isPlaying: initialIsPlaying,
-  setIsPlaying: parentSetIsPlaying, // for parent sync if needed
+  setIsPlaying: parentSetIsPlaying,
   onSkipNext,
   onSkipPrevious,
   volume: initialVolume,
-  setVolume: parentSetVolume, // for parent sync if needed
+  setVolume: parentSetVolume,
   spotifyPlayerRef,
   appleMusicUserToken,
   hasSpotify,
@@ -37,13 +37,28 @@ const PlayerContainer = ({
     });
   }, [playback.currentTrack, playback.isPlaying, playback.volume, selectedPlaybackDevice]);
 
-  // Optionally sync with parent state
+  // Sync with parent state
   React.useEffect(() => {
     if (parentSetIsPlaying) parentSetIsPlaying(playback.isPlaying);
-  }, [playback.isPlaying]);
+  }, [playback.isPlaying, parentSetIsPlaying]);
+
   React.useEffect(() => {
     if (parentSetVolume) parentSetVolume(playback.volume);
-  }, [playback.volume]);
+  }, [playback.volume, parentSetVolume]);
+
+  // Update playback state when track changes
+  React.useEffect(() => {
+    if (initialTrack) {
+      playback.setCurrentTrack(initialTrack);
+    }
+  }, [initialTrack]);
+
+  // Update playback state when isPlaying changes
+  React.useEffect(() => {
+    if (initialIsPlaying !== undefined) {
+      playback.setIsPlaying(initialIsPlaying);
+    }
+  }, [initialIsPlaying]);
 
   return (
     <>
@@ -52,8 +67,8 @@ const PlayerContainer = ({
         selectedPlaybackDevice={selectedPlaybackDevice}
         isPlaying={playback.isPlaying}
         onPlayPause={playback.handlePlayPause}
-        onSkipNext={playback.handleSkipNext}
-        onSkipPrevious={playback.handleSkipPrevious}
+        onSkipNext={onSkipNext}
+        onSkipPrevious={onSkipPrevious}
         volume={playback.volume}
         onVolumeChange={(e, v) => playback.setVolume(v)}
         onSeek={playback.handleSeek}
@@ -64,8 +79,8 @@ const PlayerContainer = ({
         track={playback.currentTrack}
         isPlaying={playback.isPlaying}
         onPlayPause={playback.handlePlayPause}
-        onSkipNext={playback.handleSkipNext}
-        onSkipPrevious={playback.handleSkipPrevious}
+        onSkipNext={onSkipNext}
+        onSkipPrevious={onSkipPrevious}
         volume={playback.volume}
         onVolumeChange={(e, v) => playback.setVolume(v)}
         spotifyPlayerRef={spotifyPlayerRef}
