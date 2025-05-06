@@ -145,6 +145,15 @@ const PlayerBar = ({
     currentTrack.source === 'appleMusic' && !selectedPlaybackDevice.hasAppleMusic
   );
 
+  debug.log('Button disabled state:', {
+    hasTrack: !!currentTrack,
+    hasDevice: !!selectedPlaybackDevice,
+    trackSource: currentTrack?.source,
+    deviceHasSpotify: selectedPlaybackDevice?.hasSpotify,
+    deviceHasAppleMusic: selectedPlaybackDevice?.hasAppleMusic,
+    isDisabled
+  });
+
   const getDisabledReason = () => {
     if (!currentTrack) return "No track in queue";
     if (!selectedPlaybackDevice) return "No playback device selected";
