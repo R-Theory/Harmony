@@ -138,33 +138,6 @@ const PlayerBar = ({
     }
   }, [currentTrack, isPlaying, onPlayPause]);
 
-  // Disable buttons when there's no track or no playback device
-  const isDisabled = !currentTrack || !selectedPlaybackDevice || (
-    (currentTrack.uri?.startsWith('spotify:') && (!selectedPlaybackDevice.hasSpotify || !window.Spotify)) ||
-    (currentTrack.uri?.startsWith('appleMusic:') && !selectedPlaybackDevice.hasAppleMusic)
-  );
-
-  debug.log('Button disabled state:', {
-    hasTrack: !!currentTrack,
-    hasDevice: !!selectedPlaybackDevice,
-    trackUri: currentTrack?.uri,
-    deviceHasSpotify: selectedPlaybackDevice?.hasSpotify,
-    deviceHasAppleMusic: selectedPlaybackDevice?.hasAppleMusic,
-    spotifySdkLoaded: !!window.Spotify,
-    isDisabled,
-    trackName: currentTrack?.name || currentTrack?.title,
-    artistName: currentTrack?.artists?.map(a => a.name).join(', ') || currentTrack?.artist
-  });
-
-  const getDisabledReason = () => {
-    if (!currentTrack) return "No track in queue";
-    if (!selectedPlaybackDevice) return "No playback device selected";
-    if (currentTrack.uri?.startsWith('spotify:') && !selectedPlaybackDevice.hasSpotify) return "Selected device cannot play Spotify tracks";
-    if (currentTrack.uri?.startsWith('spotify:') && !window.Spotify) return "Spotify player is not ready";
-    if (currentTrack.uri?.startsWith('appleMusic:') && !selectedPlaybackDevice.hasAppleMusic) return "Selected device cannot play Apple Music tracks";
-    return "";
-  };
-
   const formatTime = (ms) => {
     if (!ms) return '0:00';
     const minutes = Math.floor(ms / 60000);
@@ -222,23 +195,20 @@ const PlayerBar = ({
             <Box display="flex" alignItems="center" mb={1}>
               <IconButton 
                 onClick={onSkipPrevious} 
-                disabled={isDisabled}
-                title={isDisabled ? getDisabledReason() : "Previous track"}
+                title="Previous track"
               >
                 <SkipPrevious />
               </IconButton>
               <IconButton
                 onClick={onPlayPause}
-                disabled={isDisabled}
                 sx={{ mx: 2 }}
-                title={isDisabled ? getDisabledReason() : (isPlaying ? "Pause" : "Play")}
+                title={isPlaying ? "Pause" : "Play"}
               >
                 {isPlaying ? <Pause /> : <PlayArrow />}
               </IconButton>
               <IconButton 
                 onClick={onSkipNext} 
-                disabled={isDisabled}
-                title={isDisabled ? getDisabledReason() : "Next track"}
+                title="Next track"
               >
                 <SkipNext />
               </IconButton>
@@ -251,7 +221,6 @@ const PlayerBar = ({
                 value={localProgress}
                 onChange={handleProgressChange}
                 max={duration}
-                disabled={isDisabled}
                 sx={{ mx: 2 }}
               />
               <Typography variant="body2" sx={{ minWidth: 40 }}>
@@ -268,7 +237,6 @@ const PlayerBar = ({
               onChange={handleVolumeChange}
               min={0}
               max={100}
-              disabled={isDisabled}
               sx={{ width: 100 }}
             />
             <VolumeUp />
