@@ -138,10 +138,20 @@ const PlayerBar = ({
     }
   };
 
-  // Calculate if controls should be disabled
-  const isControlsDisabled = !currentTrack || !selectedPlaybackDevice || 
-    (currentTrack.source === 'spotify' && !selectedPlaybackDevice.hasSpotify) ||
-    (currentTrack.source === 'appleMusic' && !selectedPlaybackDevice.hasAppleMusic);
+  const handlePlayPauseClick = () => {
+    debug.log('Play/Pause button clicked', { currentTrack, isPlaying });
+    onPlayPause();
+  };
+
+  const handleSkipNextClick = () => {
+    debug.log('Skip Next button clicked', { currentTrack });
+    onSkipNext();
+  };
+
+  const handleSkipPreviousClick = () => {
+    debug.log('Skip Previous button clicked', { currentTrack });
+    onSkipPrevious();
+  };
 
   return (
     <Paper
@@ -179,23 +189,20 @@ const PlayerBar = ({
         <Grid item xs={12} sm={4}>
           <Box display="flex" alignItems="center" justifyContent="center">
             <IconButton
-              onClick={onSkipPrevious}
-              disabled={isControlsDisabled}
+              onClick={handleSkipPreviousClick}
               size="large"
             >
               <SkipPrevious />
             </IconButton>
             <IconButton
-              onClick={onPlayPause}
-              disabled={isControlsDisabled}
+              onClick={handlePlayPauseClick}
               size="large"
               color="primary"
             >
               {isPlaying ? <Pause /> : <PlayArrow />}
             </IconButton>
             <IconButton
-              onClick={onSkipNext}
-              disabled={isControlsDisabled}
+              onClick={handleSkipNextClick}
               size="large"
             >
               <SkipNext />
@@ -212,7 +219,6 @@ const PlayerBar = ({
               onChangeCommitted={handleSeekEnd}
               min={0}
               max={duration}
-              disabled={isControlsDisabled}
               sx={{ mx: 2 }}
             />
             <Typography variant="caption" sx={{ minWidth: 45 }}>
@@ -228,7 +234,6 @@ const PlayerBar = ({
               onChange={handleVolumeChange}
               min={0}
               max={100}
-              disabled={isControlsDisabled}
               sx={{ width: 100 }}
             />
             <VolumeUp />

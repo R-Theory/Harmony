@@ -669,14 +669,6 @@ export default function Session() {
 
   // Handle playback state
   useEffect(() => {
-    debug.log('[DEBUG] Playback effect triggered');
-    debug.log('[DEBUG] currentTrack:', currentTrack);
-    debug.log('[DEBUG] selectedPlaybackDevice:', selectedPlaybackDevice);
-    debug.log('[DEBUG] isPlaying:', isPlaying);
-    debug.log('[DEBUG] spotifyDeviceId:', spotifyDeviceId);
-    debug.log('[DEBUG] progress:', progress);
-    debug.log('[DEBUG] duration:', duration);
-
     // Don't proceed if session is not fully initialized
     if (!spotifyReady || !selectedPlaybackDevice) {
       debug.log('[Playback] Session not fully initialized');
@@ -691,19 +683,16 @@ export default function Session() {
 
     // Check if the selected device can play the track
     const canPlay = currentTrack.uri?.startsWith('spotify:') ? selectedPlaybackDevice.hasSpotify : selectedPlaybackDevice.hasAppleMusic;
-    debug.log('[Playback] Can play track:', { canPlay, trackUri: currentTrack.uri, deviceCapabilities: selectedPlaybackDevice });
-
-    if (!canPlay) {
-      debug.log('[Playback] Selected device cannot play this track');
-      return;
+    
+    // Only log if there's a meaningful change in playback state
+    if (canPlay && (isPlaying !== undefined)) {
+      debug.log('[Playback] Playback state updated', {
+        track: currentTrack.uri,
+        isPlaying,
+        device: selectedPlaybackDevice.name
+      });
     }
-
-    // Initialize isPlaying if undefined
-    if (isPlaying === undefined) {
-      setIsPlaying(false);
-      return;
-    }
-  }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyDeviceId, spotifyReady]);
+  }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyReady]);
 
   // Handle queue updates
   const handleQueueUpdate = (newQueue) => {
