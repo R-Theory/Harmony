@@ -29,7 +29,10 @@ export default function PlayerContainer({
 
   // Memoize the play/pause handler
   const handlePlayPause = useCallback(() => {
-    if (!currentTrack) return;
+    if (!currentTrack) {
+      debug.log('[PlayerContainer] No track to play/pause');
+      return;
+    }
     debug.log('[PlayerContainer] Play/pause clicked', { currentTrack, isPlaying });
     setIsPlaying(!isPlaying);
   }, [currentTrack, isPlaying, setIsPlaying]);
@@ -69,6 +72,8 @@ export default function PlayerContainer({
         volume={volume}
         onVolumeChange={handleVolumeChange}
         selectedPlaybackDevice={selectedPlaybackDevice}
+        progress={0}
+        duration={currentTrack?.duration_ms || 0}
       />
       <MusicPlayer
         currentTrack={currentTrack}

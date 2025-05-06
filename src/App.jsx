@@ -12,7 +12,6 @@ import Session from './pages/Session';
 
 // Components
 import Navigation from './components/Navigation';
-import PlayerBar from './components/PlayerBar';
 
 // Theme configuration
 const theme = createTheme({
@@ -63,7 +62,6 @@ function App() {
               <Route path="/session/:sessionId" element={<Session />} />
             </Routes>
           </Box>
-          <PlayerBar />
         </Box>
       </Router>
     </ThemeProvider>

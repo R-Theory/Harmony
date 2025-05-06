@@ -140,7 +140,11 @@ const PlayerBar = ({
 
   const handlePlayPauseClick = () => {
     debug.log('Play/Pause button clicked', { currentTrack, isPlaying });
-    onPlayPause();
+    if (typeof onPlayPause === 'function') {
+      onPlayPause();
+    } else {
+      debug.logError('onPlayPause is not a function', { currentTrack, isPlaying });
+    }
   };
 
   const handleSkipNextClick = () => {
