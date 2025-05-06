@@ -39,6 +39,8 @@ const MusicPlayer = ({
   const [isPlayingState, setIsPlaying] = useState(isPlaying);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const lastCommandTime = useRef(0);
+  const COMMAND_IGNORE_WINDOW = 1200; // ms
 
   // Rate limiting configuration based on Spotify API limits
   const RATE_LIMIT = 1000; // 1 second between API calls
@@ -238,6 +240,12 @@ const MusicPlayer = ({
       const handlePlayerStateChanged = async (state) => {
         if (!state) return;
 
+        // Feedback loop protection: ignore SDK state changes caused by our own command
+        if (Date.now() - lastCommandTime.current < COMMAND_IGNORE_WINDOW) {
+          debug.log('[MusicPlayer] Ignoring SDK state change caused by our own command');
+          return;
+        }
+
         debug.log('[MusicPlayer] Player state changed', state);
 
         // Update playback state
@@ -375,6 +383,8 @@ const MusicPlayer = ({
       if (!state) {
         throw new Error('Could not get player state');
       }
+
+      lastCommandTime.current = Date.now(); // Mark when we sent a command
 
       if (state.paused) {
         debug.log('Resuming playback');

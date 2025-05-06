@@ -53,6 +53,10 @@ export default function usePlaybackController({
     volume: 0
   });
 
+  // Track last command time to prevent feedback loops
+  const lastCommandTime = useRef(0);
+  const COMMAND_IGNORE_WINDOW = 1200; // ms, ignore SDK state changes within this window after our own command
+
   // Initialize Spotify SDK
   useEffect(() => {
     const initializeSpotifySDK = async () => {
@@ -171,6 +175,7 @@ export default function usePlaybackController({
     try {
       isStateUpdateInProgress.current = true;
       setPlaybackState(PLAYBACK_STATES.LOADING);
+      lastCommandTime.current = Date.now(); // Mark when we sent a command
       
       const player = spotifyPlayerRef?.current;
       if (player) {
