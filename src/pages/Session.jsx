@@ -702,7 +702,7 @@ export default function Session() {
     }
   };
 
-  // Update the playback effect to use the stored device ID
+  // Update the playback effect to only handle playback when isPlaying is true
   useEffect(() => {
     debug.log('[DEBUG] Playback effect triggered');
     debug.log('[DEBUG] currentTrack:', currentTrack);
@@ -758,6 +758,7 @@ export default function Session() {
               if (spotifyPlayerRef.current) {
                 spotifyPlayerRef.current.connect();
               }
+              setIsPlaying(false);
             });
           } else {
             debug.log('[Playback] Spotify SDK not ready or no token:', {
@@ -766,6 +767,7 @@ export default function Session() {
               hasToken: !!token,
               deviceId: spotifyDeviceId
             });
+            setIsPlaying(false);
           }
         } else if (currentTrack.source === 'appleMusic' && appleMusicUserToken) {
           debug.log('[Playback] Playing Apple Music track:', currentTrack.appleMusicId);
