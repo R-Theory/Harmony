@@ -352,14 +352,55 @@ export default function Session() {
   }, [queueService.socket, currentTrack, isPlaying, lastQueueUpdate]);
 
   // Playback control handlers
-  const handlePlayPause = () => {
+  const handlePlayPause = async () => {
     if (!currentTrack) return;
     debug.log('[DEBUG][Session][PlayerBar] User clicked play/pause button', {
       currentTrack,
       wasPlaying: isPlaying,
       willPlay: !isPlaying
     });
-    setIsPlaying(prev => !prev);
+
+    try {
+      const player = spotifyPlayerRef.current;
+      if (!player) {
+        throw new Error('No Spotify player instance');
+      }
+
+      // Get current state
+      const state = await player.getCurrentState();
+      
+      // If we have a track but it's not loaded, load it first
+      if (currentTrack && (!state || state.track_window?.current_track?.uri !== currentTrack.uri)) {
+        debug.log('Loading track before playing', { currentTrack });
+        await player.load(currentTrack.uri);
+        // Wait a bit for the track to load
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      if (!state || state.paused) {
+        debug.log('Resuming playback');
+        await player.resume();
+      } else {
+        debug.log('Pausing playback');
+        await player.pause();
+      }
+
+      // Update UI state
+      setIsPlaying(prev => !prev);
+    } catch (error) {
+      debug.logError(error, 'Error in play/pause');
+      // If we get a 404, try to refresh the token
+      if (error.message?.includes('404')) {
+        const accessToken = localStorage.getItem('spotify_access_token');
+        if (accessToken) {
+          debug.log('Refreshing Spotify token');
+          // Force token refresh by clearing it
+          localStorage.removeItem('spotify_access_token');
+          window.location.reload();
+          return;
+        }
+      }
+    }
   };
 
   const handleSkipNext = () => {
