@@ -77,24 +77,22 @@ const PlayerBar = ({
 
   const handleProgressChange = (event, newValue) => {
     if (!currentTrack) return;
-    
+    debug.log('[DEBUG][PlayerBar] User tried to change track progress slider', { newValue });
     const now = Date.now();
     if (now - lastSeekTime < SEEK_RATE_LIMIT) {
       return;
     }
-    
     setLastSeekTime(now);
     onSeek(newValue);
   };
 
   const handleVolumeChange = (event, newValue) => {
     if (!currentTrack) return;
-    
+    debug.log('[DEBUG][PlayerBar] User tried to change volume slider', { newValue });
     const now = Date.now();
     if (now - lastVolumeChange < VOLUME_RATE_LIMIT) {
       return;
     }
-    
     setLastVolumeChange(now);
     onVolumeChange(newValue);
   };
@@ -179,20 +177,20 @@ const PlayerBar = ({
           <Box display="flex" flexDirection="column" alignItems="center">
             <Box display="flex" alignItems="center" mb={1}>
               <IconButton 
-                onClick={onSkipPrevious} 
+                onClick={() => { debug.log('[DEBUG][PlayerBar] User clicked skip previous button'); onSkipPrevious(); }} 
                 title="Previous track"
               >
                 <SkipPrevious />
               </IconButton>
               <IconButton
-                onClick={onPlayPause}
+                onClick={() => { debug.log('[DEBUG][PlayerBar] User clicked play/pause button'); onPlayPause(); }}
                 sx={{ mx: 2 }}
                 title={isPlaying ? "Pause" : "Play"}
               >
                 {isPlaying ? <Pause /> : <PlayArrow />}
               </IconButton>
               <IconButton 
-                onClick={onSkipNext} 
+                onClick={() => { debug.log('[DEBUG][PlayerBar] User clicked skip next button'); onSkipNext(); }} 
                 title="Next track"
               >
                 <SkipNext />

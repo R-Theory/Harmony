@@ -601,20 +601,16 @@ export default function Session() {
               duration: state.track_window.current_track.duration_ms
             };
             setCurrentTrack(currentTrack);
-            // Only set isPlaying to true if we have a track AND we're not paused AND we have a playback device
-            setIsPlaying(!state.paused && selectedPlaybackDevice !== null);
             setProgress(state.position);
             setDuration(state.duration);
           } else {
             // If no track, ensure we're not playing
-            setIsPlaying(false);
             setCurrentTrack(null);
             setProgress(0);
             setDuration(0);
           }
         } else {
           // If no state, ensure we're not playing
-          setIsPlaying(false);
           setCurrentTrack(null);
           setProgress(0);
           setDuration(0);
