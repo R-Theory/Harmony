@@ -54,6 +54,7 @@ import DeviceSelectionDialog from '../components/DeviceSelectionDialog';
 import StreamingBanner from '../components/StreamingBanner';
 import SessionInfoPanel from '../components/SessionInfoPanel';
 import PlayerContainer from '../components/PlayerContainer';
+import { normalizeSpotifyTrack } from '../types/track';
 
 const debug = new DebugLogger('Session');
 
@@ -320,19 +321,7 @@ export default function Session() {
         
         if (updatedQueue && updatedQueue.length > 0) {
           const track = updatedQueue[0];
-          const mappedTrack = {
-            ...track,
-            title: track.name || track.title,
-            artist: track.artists
-              ? (Array.isArray(track.artists)
-                  ? track.artists.map(a => a.name).join(', ')
-                  : track.artists)
-              : track.artist || '',
-            albumArt: track.album?.images?.[0]?.url,
-            source: 'spotify',
-            uri: track.uri,
-            duration: track.duration_ms
-          };
+          const mappedTrack = normalizeSpotifyTrack(track);
           
           debug.log('Queue update received', {
             queueLength: updatedQueue.length,

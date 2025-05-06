@@ -19,6 +19,7 @@ import {
   VolumeDown,
 } from '@mui/icons-material';
 import DebugLogger from '../utils/debug';
+import { NormalizedTrack } from '../types/track';
 
 const debug = new DebugLogger('PlayerBar');
 const SEEK_RATE_LIMIT = 1000; // 1 second between seeks
@@ -176,20 +177,16 @@ const PlayerBar = ({
           {currentTrack && (
             <Box display="flex" alignItems="center">
               <Avatar
-                src={currentTrack.albumArt}
-                alt={currentTrack.title || currentTrack.name}
+                src={currentTrack.album?.images?.[0]?.url}
+                alt={currentTrack.name}
                 sx={{ width: 56, height: 56, mr: 2 }}
               />
               <Box>
                 <Typography variant="subtitle1" noWrap>
-                  {currentTrack.title || currentTrack.name}
+                  {currentTrack.name}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" noWrap>
-                  {currentTrack.artist || (currentTrack.artists ? 
-                    (Array.isArray(currentTrack.artists) 
-                      ? currentTrack.artists.map(a => a.name).join(', ')
-                      : currentTrack.artists)
-                    : '')}
+                  {currentTrack.artists?.map(artist => artist.name).join(', ')}
                 </Typography>
               </Box>
             </Box>
@@ -249,7 +246,28 @@ const PlayerBar = ({
 };
 
 PlayerBar.propTypes = {
-  currentTrack: PropTypes.object,
+  currentTrack: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    artists: PropTypes.arrayOf(PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired
+    })).isRequired,
+    album: PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+      images: PropTypes.arrayOf(PropTypes.shape({
+        url: PropTypes.string.isRequired,
+        height: PropTypes.number,
+        width: PropTypes.number
+      }))
+    }).isRequired,
+    duration_ms: PropTypes.number.isRequired,
+    uri: PropTypes.string.isRequired,
+    source: PropTypes.oneOf(['spotify', 'appleMusic']).isRequired,
+    preview_url: PropTypes.string,
+    is_playable: PropTypes.bool.isRequired
+  }),
   isPlaying: PropTypes.bool.isRequired,
   onPlayPause: PropTypes.func,
   onSkipNext: PropTypes.func,
