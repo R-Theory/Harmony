@@ -177,15 +177,19 @@ const PlayerBar = ({
             <Box display="flex" alignItems="center">
               <Avatar
                 src={currentTrack.albumArt}
-                alt={currentTrack.title}
+                alt={currentTrack.title || currentTrack.name}
                 sx={{ width: 56, height: 56, mr: 2 }}
               />
               <Box>
                 <Typography variant="subtitle1" noWrap>
-                  {currentTrack.title}
+                  {currentTrack.title || currentTrack.name}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" noWrap>
-                  {currentTrack.artist}
+                  {currentTrack.artist || (currentTrack.artists ? 
+                    (Array.isArray(currentTrack.artists) 
+                      ? currentTrack.artists.map(a => a.name).join(', ')
+                      : currentTrack.artists)
+                    : '')}
                 </Typography>
               </Box>
             </Box>
