@@ -36,6 +36,9 @@ const MusicPlayer = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentTrack, setCurrentTrack] = useState(null);
+  const [isPlayingState, setIsPlaying] = useState(isPlaying);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   // Rate limiting configuration based on Spotify API limits
   const RATE_LIMIT = 1000; // 1 second between API calls
@@ -232,33 +235,39 @@ const MusicPlayer = ({
         return;
       }
 
-      const handlePlayerStateChanged = (state) => {
-        debug.log('Player state changed', {
-          position: state.position,
-          duration: state.duration,
-          paused: state.paused,
-          track_window: {
-            current_track: state.track_window?.current_track,
-            next_tracks: state.track_window?.next_tracks?.length
-          }
-        });
+      const handlePlayerStateChanged = async (state) => {
+        if (!state) return;
 
-        // Update progress and duration
-        if (state.position !== undefined) {
-          onProgressUpdate(state.position, state.duration);
-        }
+        debug.log('[MusicPlayer] Player state changed', state);
 
-        // Update playing state through callback
-        onPlayPause(!state.paused);
+        // Update playback state
+        const isPlaying = !state.paused;
+        setIsPlaying(isPlaying);
 
-        // Check if track changed
-        if (state.track_window?.current_track?.uri !== currentTrack?.uri) {
-          debug.log('Track changed in player', {
+        // Update progress
+        setProgress(state.position);
+        setDuration(state.duration);
+
+        // Handle track changes
+        if (state.track_window?.current_track) {
+          const newTrack = {
+            ...state.track_window.current_track,
+            title: state.track_window.current_track.name,
+            artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
+            albumArt: state.track_window.current_track.album?.images?.[0]?.url,
+            uri: state.track_window.current_track.uri,
+            duration: state.track_window.current_track.duration_ms
+          };
+
+          debug.log('[MusicPlayer] Track changed in player', {
             previousTrack: currentTrack,
-            newTrack: state.track_window?.current_track
+            newTrack
           });
-          setCurrentTrack(state.track_window?.current_track);
-          onTrackChange(state.track_window?.current_track);
+
+          setCurrentTrack(newTrack);
+          if (onTrackChange) {
+            onTrackChange(newTrack);
+          }
         }
       };
 

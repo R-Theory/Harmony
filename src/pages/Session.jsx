@@ -480,11 +480,16 @@ export default function Session() {
       const script = document.createElement('script');
       script.src = 'https://sdk.scdn.co/spotify-player.js';
       script.async = true;
+      
+      // Define the callback before loading the script
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        console.log('[Spotify SDK] Ready callback triggered');
+        setSpotifyReady(true);
+      };
+      
       document.body.appendChild(script);
       script.onload = () => {
         console.log('[Spotify SDK] Script loaded');
-        // Set ready state after script is loaded
-        setSpotifyReady(true);
       };
     } else {
       // SDK already loaded
@@ -694,8 +699,8 @@ export default function Session() {
     }
 
     // Check if the selected device can play the track
-    const canPlay = currentTrack.source === 'spotify' ? selectedPlaybackDevice.hasSpotify : selectedPlaybackDevice.hasAppleMusic;
-    debug.log('[Playback] Can play track:', { canPlay, trackSource: currentTrack.source, deviceCapabilities: selectedPlaybackDevice });
+    const canPlay = currentTrack.uri?.startsWith('spotify:') ? selectedPlaybackDevice.hasSpotify : selectedPlaybackDevice.hasAppleMusic;
+    debug.log('[Playback] Can play track:', { canPlay, trackUri: currentTrack.uri, deviceCapabilities: selectedPlaybackDevice });
 
     if (!canPlay) {
       debug.log('[Playback] Selected device cannot play this track');
@@ -709,14 +714,19 @@ export default function Session() {
     }
 
     // Handle Spotify playback
-    if (currentTrack.source === 'spotify' && spotifyDeviceId) {
+    if (currentTrack.uri?.startsWith('spotify:') && spotifyDeviceId && spotifyPlayerRef.current) {
       debug.log('[Playback] This device will play the track');
       if (isPlaying) {
         debug.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
-        spotifyPlayerRef.current?.play();
+        spotifyPlayerRef.current.resume().catch(error => {
+          debug.logError('[Spotify] Error resuming playback:', error);
+          setIsPlaying(false);
+        });
       } else {
         debug.log('[Playback] Pausing Spotify track');
-        spotifyPlayerRef.current?.pause();
+        spotifyPlayerRef.current.pause().catch(error => {
+          debug.logError('[Spotify] Error pausing playback:', error);
+        });
       }
     }
   }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyDeviceId, spotifyReady]);
