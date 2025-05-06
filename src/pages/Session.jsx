@@ -630,10 +630,6 @@ export default function Session() {
           debug.log('[Spotify SDK] Player state changed:', state);
           // Only update isPlaying if we have a track
           if (state.track_window.current_track) {
-            setIsPlaying(!state.paused);
-            setProgress(state.position);
-            setDuration(state.duration);
-            
             const currentTrack = {
               ...state.track_window.current_track,
               title: state.track_window.current_track.name,
@@ -644,6 +640,9 @@ export default function Session() {
               duration: state.track_window.current_track.duration_ms
             };
             setCurrentTrack(currentTrack);
+            setIsPlaying(!state.paused);
+            setProgress(state.position);
+            setDuration(state.duration);
           } else {
             // If no track, ensure we're not playing
             setIsPlaying(false);
@@ -656,8 +655,10 @@ export default function Session() {
 
       // Add progress update listener
       spotifyPlayer.addListener('progress', ({ position, duration }) => {
-        setProgress(position);
-        setDuration(duration);
+        if (currentTrack) {  // Only update progress if we have a current track
+          setProgress(position);
+          setDuration(duration);
+        }
       });
 
       spotifyPlayer.connect();
