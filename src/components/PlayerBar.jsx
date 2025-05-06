@@ -77,7 +77,6 @@ const PlayerBar = ({
 
   const handleProgressChange = (event, newValue) => {
     if (!currentTrack) return;
-    debug.log('[DEBUG][PlayerBar] User tried to change track progress slider', { newValue });
     const now = Date.now();
     if (now - lastSeekTime < SEEK_RATE_LIMIT) {
       return;
@@ -88,7 +87,6 @@ const PlayerBar = ({
 
   const handleVolumeChange = (event, newValue) => {
     if (!currentTrack) return;
-    debug.log('[DEBUG][PlayerBar] User tried to change volume slider', { newValue });
     const now = Date.now();
     if (now - lastVolumeChange < VOLUME_RATE_LIMIT) {
       return;
@@ -140,6 +138,11 @@ const PlayerBar = ({
     }
   };
 
+  // Calculate if controls should be disabled
+  const isControlsDisabled = !currentTrack || !selectedPlaybackDevice || 
+    (currentTrack.source === 'spotify' && !selectedPlaybackDevice.hasSpotify) ||
+    (currentTrack.source === 'appleMusic' && !selectedPlaybackDevice.hasAppleMusic);
+
   return (
     <Paper
       elevation={3}
@@ -148,68 +151,73 @@ const PlayerBar = ({
         bottom: 0,
         left: 0,
         right: 0,
-        p: 2,
+        padding: 2,
         backgroundColor: theme.palette.background.paper,
-        borderTop: `1px solid ${theme.palette.divider}`,
+        zIndex: theme.zIndex.appBar
       }}
     >
       <Grid container spacing={2} alignItems="center">
         <Grid item xs={12} sm={4}>
-          {currentTrack && (
-            <Box display="flex" alignItems="center">
+          <Box display="flex" alignItems="center">
+            {currentTrack?.albumArt && (
               <Avatar
-                src={currentTrack.album?.images?.[0]?.url || currentTrack.albumArt}
-                alt={currentTrack.name || currentTrack.title}
-                sx={{ width: 56, height: 56, mr: 2 }}
+                src={currentTrack.albumArt}
+                alt={currentTrack.name}
+                sx={{ width: 56, height: 56, marginRight: 2 }}
               />
-              <Box>
-                <Typography variant="subtitle1" noWrap>
-                  {currentTrack.name || currentTrack.title}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" noWrap>
-                  {currentTrack.artists?.map(artist => artist.name).join(', ') || currentTrack.artist}
-                </Typography>
-              </Box>
+            )}
+            <Box>
+              <Typography variant="subtitle1" noWrap>
+                {currentTrack?.name || 'No track selected'}
+              </Typography>
+              <Typography variant="body2" color="textSecondary" noWrap>
+                {currentTrack?.artist || 'No artist'}
+              </Typography>
             </Box>
-          )}
+          </Box>
         </Grid>
         <Grid item xs={12} sm={4}>
-          <Box display="flex" flexDirection="column" alignItems="center">
-            <Box display="flex" alignItems="center" mb={1}>
-              <IconButton 
-                onClick={() => { debug.log('[DEBUG][PlayerBar] User clicked skip previous button'); onSkipPrevious(); }} 
-                title="Previous track"
-              >
-                <SkipPrevious />
-              </IconButton>
-              <IconButton
-                onClick={() => { debug.log('[DEBUG][PlayerBar] User clicked play/pause button'); onPlayPause(); }}
-                sx={{ mx: 2 }}
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? <Pause /> : <PlayArrow />}
-              </IconButton>
-              <IconButton 
-                onClick={() => { debug.log('[DEBUG][PlayerBar] User clicked skip next button'); onSkipNext(); }} 
-                title="Next track"
-              >
-                <SkipNext />
-              </IconButton>
-            </Box>
-            <Box display="flex" alignItems="center" width="100%">
-              <Typography variant="body2" sx={{ minWidth: 40 }}>
-                {formatTime(localProgress)}
-              </Typography>
-              <Slider
-                value={localProgress}
-                onChange={handleProgressChange}
-                max={duration}
-                sx={{ mx: 2 }}
-              />
-              <Typography variant="body2" sx={{ minWidth: 40 }}>
-                {formatTime(duration)}
-              </Typography>
-            </Box>
+          <Box display="flex" alignItems="center" justifyContent="center">
+            <IconButton
+              onClick={onSkipPrevious}
+              disabled={isControlsDisabled}
+              size="large"
+            >
+              <SkipPrevious />
+            </IconButton>
+            <IconButton
+              onClick={onPlayPause}
+              disabled={isControlsDisabled}
+              size="large"
+              color="primary"
+            >
+              {isPlaying ? <Pause /> : <PlayArrow />}
+            </IconButton>
+            <IconButton
+              onClick={onSkipNext}
+              disabled={isControlsDisabled}
+              size="large"
+            >
+              <SkipNext />
+            </IconButton>
+          </Box>
+          <Box display="flex" alignItems="center" sx={{ mt: 1 }}>
+            <Typography variant="caption" sx={{ minWidth: 45 }}>
+              {formatTime(localProgress)}
+            </Typography>
+            <Slider
+              value={localProgress}
+              onChange={handleProgressChange}
+              onMouseDown={handleSeekStart}
+              onChangeCommitted={handleSeekEnd}
+              min={0}
+              max={duration}
+              disabled={isControlsDisabled}
+              sx={{ mx: 2 }}
+            />
+            <Typography variant="caption" sx={{ minWidth: 45 }}>
+              {formatTime(duration)}
+            </Typography>
           </Box>
         </Grid>
         <Grid item xs={12} sm={4}>
@@ -220,6 +228,7 @@ const PlayerBar = ({
               onChange={handleVolumeChange}
               min={0}
               max={100}
+              disabled={isControlsDisabled}
               sx={{ width: 100 }}
             />
             <VolumeUp />

@@ -107,23 +107,29 @@ export default function usePlaybackController({
   // Debounced state update logging
   useEffect(() => {
     const now = Date.now();
-    if (now - lastStateUpdate.current < 100) return;
+    if (now - lastStateUpdate.current < 2000) return; // Increased debounce time to 2000ms
     lastStateUpdate.current = now;
 
     if (stateUpdateTimeout.current) {
       clearTimeout(stateUpdateTimeout.current);
     }
     stateUpdateTimeout.current = setTimeout(() => {
-      debug.log('Playback state changed', {
-        playbackState,
-        currentTrack,
-        progress,
-        duration,
-        volume,
-        error,
-        sdkStatus
-      });
-    }, 100);
+      // Only log if there's a meaningful change
+      if (playbackState !== PLAYBACK_STATES.IDLE || error || sdkStatus === SDK_STATES.ERROR) {
+        debug.log('Playback state changed', {
+          playbackState,
+          currentTrack: currentTrack ? {
+            uri: currentTrack.uri,
+            name: currentTrack.name
+          } : null,
+          progress,
+          duration,
+          volume,
+          error,
+          sdkStatus
+        });
+      }
+    }, 2000);
 
     return () => {
       if (stateUpdateTimeout.current) {
@@ -158,13 +164,13 @@ export default function usePlaybackController({
   // Play/pause handler
   const handlePlayPause = useCallback(async () => {
     if (!currentTrack) {
-      debug.log('[DEBUG][usePlaybackController][handlePlayPause] No track to play/pause');
+      debug.log('No track to play/pause');
       return;
     }
 
     if (!isActionAllowed('playPause')) return;
     if (isStateUpdateInProgress.current) {
-      debug.log('[DEBUG][usePlaybackController][handlePlayPause] State update already in progress, ignoring play/pause request');
+      debug.log('State update already in progress, ignoring play/pause request');
       return;
     }
     if (sdkStatus !== SDK_STATES.READY) {
@@ -175,28 +181,23 @@ export default function usePlaybackController({
     try {
       isStateUpdateInProgress.current = true;
       setPlaybackState(PLAYBACK_STATES.LOADING);
-      lastCommandTime.current = Date.now(); // Mark when we sent a command
+      lastCommandTime.current = Date.now();
       
       const player = spotifyPlayerRef?.current;
       if (player) {
         if (playbackState === PLAYBACK_STATES.PLAYING) {
-          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Calling player.pause() from PlayerBar button or user action');
           await player.pause();
-          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Site is now pausing music (pause successful)');
           setPlaybackState(PLAYBACK_STATES.PAUSED);
         } else {
-          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Calling player.resume() from PlayerBar button or user action');
           await player.resume();
-          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Site is now playing music (resume successful)');
           setPlaybackState(PLAYBACK_STATES.PLAYING);
         }
       } else {
-        debug.log('[DEBUG][usePlaybackController][handlePlayPause] No player available');
         setError('Playback device not available. Please select a device.');
         setPlaybackState(PLAYBACK_STATES.ERROR);
       }
     } catch (error) {
-      debug.logError(error, '[DEBUG][usePlaybackController][handlePlayPause] Error in play/pause');
+      debug.logError(error, 'Error in play/pause');
       setError(error.message.includes('404') 
         ? 'Failed to load track. Please try again.'
         : 'Failed to control playback. Please try again.');

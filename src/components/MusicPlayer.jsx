@@ -242,11 +242,8 @@ const MusicPlayer = ({
 
         // Feedback loop protection: ignore SDK state changes caused by our own command
         if (Date.now() - lastCommandTime.current < COMMAND_IGNORE_WINDOW) {
-          debug.log('[MusicPlayer] Ignoring SDK state change caused by our own command');
           return;
         }
-
-        debug.log('[MusicPlayer] Player state changed', state);
 
         // Update playback state
         const isPlaying = !state.paused;
@@ -267,14 +264,16 @@ const MusicPlayer = ({
             duration: state.track_window.current_track.duration_ms
           };
 
-          debug.log('[MusicPlayer] Track changed in player', {
-            previousTrack: currentTrack,
-            newTrack
-          });
+          if (newTrack.uri !== currentTrack?.uri) {
+            debug.log('Track changed in player', {
+              previousTrack: currentTrack?.uri,
+              newTrack: newTrack.uri
+            });
 
-          setCurrentTrack(newTrack);
-          if (onTrackChange) {
-            onTrackChange(newTrack);
+            setCurrentTrack(newTrack);
+            if (onTrackChange) {
+              onTrackChange(newTrack);
+            }
           }
         }
       };
@@ -295,12 +294,10 @@ const MusicPlayer = ({
       };
 
       const handlePlaybackError = (error) => {
-        debug.logError(error, 'Player playback');
-        // Only set error if it's not a non-critical error
+        // Only log non-critical errors
         if (!error.message?.includes('item_before_load') && !error.message?.includes('PlayLoad event failed with status 404')) {
+          debug.logError(error, 'Player playback');
           setError(error.message);
-        } else {
-          debug.log('Non-critical playback error, continuing with playback', error);
         }
       };
 
@@ -365,7 +362,6 @@ const MusicPlayer = ({
   // Handle play/pause
   const handlePlayPause = async () => {
     if (isLoading) {
-      debug.log('[DEBUG][MusicPlayer][handlePlayPause] Playback operation already in progress');
       return;
     }
 
@@ -384,22 +380,18 @@ const MusicPlayer = ({
         throw new Error('Could not get player state');
       }
 
-      lastCommandTime.current = Date.now(); // Mark when we sent a command
+      lastCommandTime.current = Date.now();
 
       if (state.paused) {
-        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Calling player.resume() from user action');
         await player.resume();
-        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Site is now playing music (resume successful)');
       } else {
-        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Calling player.pause() from user action');
         await player.pause();
-        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Site is now pausing music (pause successful)');
       }
 
       // Update local state
       onPlayPause(!state.paused);
     } catch (error) {
-      debug.logError(error, '[DEBUG][MusicPlayer][handlePlayPause] Error in play/pause');
+      debug.logError(error, 'Error in play/pause');
       setError(error.message);
     } finally {
       setIsLoading(false);
