@@ -17,38 +17,56 @@ export default function usePlaybackController({
   const [volume, setVolume] = useState(initialVolume);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const stateUpdateTimeout = useRef(null);
 
   // Update currentTrack when initialTrack changes
   useEffect(() => {
     debug.log('Track changed', { previousTrack: currentTrack, newTrack: initialTrack });
-    setCurrentTrack(initialTrack);
-    // Reset playback state when track changes
-    if (initialTrack) {
-      setProgress(0);
-      setDuration(initialTrack.duration_ms || 0);
-    } else {
-      setProgress(0);
-      setDuration(0);
-      setIsPlaying(false);
+    if (initialTrack?.uri !== currentTrack?.uri) {
+      setCurrentTrack(initialTrack);
+      // Reset playback state when track changes
+      if (initialTrack) {
+        setProgress(0);
+        setDuration(initialTrack.duration_ms || 0);
+        // Don't automatically set isPlaying - let the Spotify player state handle it
+      } else {
+        setProgress(0);
+        setDuration(0);
+        setIsPlaying(false);
+      }
     }
   }, [initialTrack]);
 
   // Update isPlaying when initialIsPlaying changes
   useEffect(() => {
     debug.log('Playback state changed', { previousState: isPlaying, newState: initialIsPlaying });
-    setIsPlaying(initialIsPlaying);
+    if (initialIsPlaying !== isPlaying) {
+      setIsPlaying(initialIsPlaying);
+    }
   }, [initialIsPlaying]);
 
+  // Debounced state update logging
   useEffect(() => {
-    debug.log('Playback state changed', {
-      currentTrack,
-      isPlaying,
-      progress,
-      duration,
-      volume,
-      error,
-      isLoading
-    });
+    if (stateUpdateTimeout.current) {
+      clearTimeout(stateUpdateTimeout.current);
+    }
+    stateUpdateTimeout.current = setTimeout(() => {
+      debug.log('Playback state changed', {
+        currentTrack,
+        isPlaying,
+        progress,
+        duration,
+        volume,
+        error,
+        isLoading
+      });
+    }, 100);
+
+    return () => {
+      if (stateUpdateTimeout.current) {
+        clearTimeout(stateUpdateTimeout.current);
+      }
+    };
   }, [currentTrack, isPlaying, progress, duration, volume, error, isLoading]);
 
   // Progress update handler

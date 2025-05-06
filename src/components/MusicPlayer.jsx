@@ -319,7 +319,7 @@ const MusicPlayer = ({
         player.removeListener('playback_error', handlePlaybackError);
       };
     }
-  }, [track, isPlaying, volume, spotifyPlayerRef, onProgressUpdate, onTrackChange]);
+  }, [track, spotifyPlayerRef, onTrackChange]);
 
   // Handle Apple Music playback
   useEffect(() => {
