@@ -712,23 +712,6 @@ export default function Session() {
       setIsPlaying(false);
       return;
     }
-
-    // Handle Spotify playback
-    if (currentTrack.uri?.startsWith('spotify:') && spotifyDeviceId && spotifyPlayerRef.current) {
-      debug.log('[Playback] This device will play the track');
-      if (isPlaying) {
-        debug.log('[Playback] Playing Spotify track via SDK:', currentTrack.uri);
-        spotifyPlayerRef.current.resume().catch(error => {
-          debug.logError('[Spotify] Error resuming playback:', error);
-          setIsPlaying(false);
-        });
-      } else {
-        debug.log('[Playback] Pausing Spotify track');
-        spotifyPlayerRef.current.pause().catch(error => {
-          debug.logError('[Spotify] Error pausing playback:', error);
-        });
-      }
-    }
   }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyDeviceId, spotifyReady]);
 
   // Handle queue updates
