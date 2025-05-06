@@ -47,7 +47,6 @@ const PlayerBar = ({
 
   // Update local progress when not seeking
   useEffect(() => {
-    debug.log('Progress update received', { progress, isSeeking });
     if (!isSeeking) {
       setLocalProgress(progress);
     }
@@ -55,13 +54,11 @@ const PlayerBar = ({
 
   // Update progress every second when playing
   useEffect(() => {
-    debug.log('Playback state changed', { isPlaying, currentTrack, isSeeking });
     if (isPlaying && currentTrack && !isSeeking) {
       progressInterval.current = setInterval(() => {
         setLocalProgress(prev => {
           const newProgress = prev + 1000; // Add 1 second in milliseconds
           if (newProgress >= duration) {
-            debug.log('Track ended, skipping to next');
             clearInterval(progressInterval.current);
             onSkipNext(); // Automatically skip to next track when current one ends
             return 0;
@@ -83,15 +80,10 @@ const PlayerBar = ({
     
     const now = Date.now();
     if (now - lastSeekTime < SEEK_RATE_LIMIT) {
-      debug.log('Seek rate limited', {
-        timeSinceLastSeek: now - lastSeekTime,
-        requiredInterval: SEEK_RATE_LIMIT
-      });
       return;
     }
     
     setLastSeekTime(now);
-    debug.log('Seeking to position', { newValue });
     onSeek(newValue);
   };
 
@@ -100,21 +92,15 @@ const PlayerBar = ({
     
     const now = Date.now();
     if (now - lastVolumeChange < VOLUME_RATE_LIMIT) {
-      debug.log('Volume change rate limited', {
-        timeSinceLastChange: now - lastVolumeChange,
-        requiredInterval: VOLUME_RATE_LIMIT
-      });
       return;
     }
     
     setLastVolumeChange(now);
-    debug.log('Volume changed', { newValue });
     onVolumeChange(newValue);
   };
 
   // Update progress bar smoothly
   useEffect(() => {
-    debug.log('Progress bar effect triggered', { isPlaying, currentTrack, duration });
     if (!isPlaying || !currentTrack) {
       setLocalProgress(0);
       return;
@@ -133,7 +119,6 @@ const PlayerBar = ({
   // Ensure isPlaying is false when there's no track
   useEffect(() => {
     if (!currentTrack && isPlaying) {
-      debug.log('No track but isPlaying is true, setting to false');
       onPlayPause();
     }
   }, [currentTrack, isPlaying, onPlayPause]);
