@@ -710,6 +710,12 @@ export default function Session() {
       return;
     }
 
+    // Only proceed if we have a valid track and we're trying to play it
+    if (!isPlaying) {
+      debug.log('[Playback] Not playing, skipping playback initialization');
+      return;
+    }
+
     const canPlay =
       (currentTrack.source === 'spotify' && selectedPlaybackDevice.hasSpotify) ||
       (currentTrack.source === 'appleMusic' && selectedPlaybackDevice.hasAppleMusic);
