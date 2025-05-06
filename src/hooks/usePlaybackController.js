@@ -3,6 +3,28 @@ import DebugLogger from '../utils/debug';
 
 const debug = new DebugLogger('usePlaybackController');
 
+// Constants for state management
+const PLAYBACK_STATES = {
+  IDLE: 'idle',
+  LOADING: 'loading',
+  PLAYING: 'playing',
+  PAUSED: 'paused',
+  ERROR: 'error'
+};
+
+const SDK_STATES = {
+  INITIALIZING: 'initializing',
+  LOADING: 'loading',
+  READY: 'ready',
+  ERROR: 'error'
+};
+
+const COOLDOWNS = {
+  PLAY_PAUSE: 1000, // 1 second
+  SEEK: 500,        // 500ms
+  VOLUME: 200       // 200ms
+};
+
 export default function usePlaybackController({
   initialTrack = null,
   initialIsPlaying = false,
@@ -10,26 +32,32 @@ export default function usePlaybackController({
   spotifyPlayerRef,
   appleMusicUserToken
 }) {
+  // Core playback state
+  const [playbackState, setPlaybackState] = useState(PLAYBACK_STATES.IDLE);
   const [currentTrack, setCurrentTrack] = useState(initialTrack);
-  const [isPlaying, setIsPlaying] = useState(initialIsPlaying);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(initialVolume);
   const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const stateUpdateTimeout = useRef(null);
-  const [isSeeking, setIsSeeking] = useState(false);
+
+  // SDK state
+  const [sdkStatus, setSdkStatus] = useState(SDK_STATES.INITIALIZING);
+
+  // Refs for state management
   const isStateUpdateInProgress = useRef(false);
   const lastStateUpdate = useRef(Date.now());
-  const [sdkStatus, setSdkStatus] = useState('initializing');
+  const lastActionTimes = useRef({
+    playPause: 0,
+    seek: 0,
+    volume: 0
+  });
 
   // Initialize Spotify SDK
   useEffect(() => {
     const initializeSpotifySDK = async () => {
       try {
         if (!window.Spotify) {
-          setSdkStatus('loading');
-          // Wait for Spotify SDK to load
+          setSdkStatus(SDK_STATES.LOADING);
           await new Promise((resolve, reject) => {
             const checkSDK = setInterval(() => {
               if (window.Spotify) {
@@ -37,17 +65,16 @@ export default function usePlaybackController({
                 resolve();
               }
             }, 100);
-            // Timeout after 10 seconds
             setTimeout(() => {
               clearInterval(checkSDK);
               reject(new Error('Spotify SDK failed to load'));
             }, 10000);
           });
         }
-        setSdkStatus('ready');
+        setSdkStatus(SDK_STATES.READY);
       } catch (error) {
         debug.logError(error, 'Failed to initialize Spotify SDK');
-        setSdkStatus('error');
+        setSdkStatus(SDK_STATES.ERROR);
         setError('Failed to initialize Spotify player. Please refresh the page.');
       }
     };
@@ -55,7 +82,7 @@ export default function usePlaybackController({
     initializeSpotifySDK();
   }, []);
 
-  // Update currentTrack when initialTrack changes
+  // Track change handler
   useEffect(() => {
     if (initialTrack?.uri !== currentTrack?.uri) {
       debug.log('Track changed', { previousTrack: currentTrack, newTrack: initialTrack });
@@ -63,28 +90,19 @@ export default function usePlaybackController({
       if (initialTrack) {
         setProgress(0);
         setDuration(initialTrack.duration_ms || 0);
+        setPlaybackState(initialIsPlaying ? PLAYBACK_STATES.PLAYING : PLAYBACK_STATES.PAUSED);
       } else {
         setProgress(0);
         setDuration(0);
-        setIsPlaying(false);
+        setPlaybackState(PLAYBACK_STATES.IDLE);
       }
     }
-  }, [initialTrack]);
-
-  // Update isPlaying when initialIsPlaying changes
-  useEffect(() => {
-    if (initialIsPlaying !== isPlaying && !isStateUpdateInProgress.current) {
-      debug.log('Playback state changed', { previousState: isPlaying, newState: initialIsPlaying });
-      setIsPlaying(initialIsPlaying);
-    }
-  }, [initialIsPlaying]);
+  }, [initialTrack, initialIsPlaying]);
 
   // Debounced state update logging
   useEffect(() => {
     const now = Date.now();
-    if (now - lastStateUpdate.current < 100) {
-      return;
-    }
+    if (now - lastStateUpdate.current < 100) return;
     lastStateUpdate.current = now;
 
     if (stateUpdateTimeout.current) {
@@ -92,13 +110,12 @@ export default function usePlaybackController({
     }
     stateUpdateTimeout.current = setTimeout(() => {
       debug.log('Playback state changed', {
+        playbackState,
         currentTrack,
-        isPlaying,
         progress,
         duration,
         volume,
         error,
-        isLoading,
         sdkStatus
       });
     }, 100);
@@ -108,15 +125,30 @@ export default function usePlaybackController({
         clearTimeout(stateUpdateTimeout.current);
       }
     };
-  }, [currentTrack, isPlaying, progress, duration, volume, error, isLoading, sdkStatus]);
+  }, [playbackState, currentTrack, progress, duration, volume, error, sdkStatus]);
+
+  // Check if action is allowed based on cooldown
+  const isActionAllowed = useCallback((actionType) => {
+    const now = Date.now();
+    const lastActionTime = lastActionTimes.current[actionType];
+    const cooldown = COOLDOWNS[actionType.toUpperCase()];
+    
+    if (now - lastActionTime < cooldown) {
+      debug.log(`${actionType} cooldown active, ignoring request`);
+      return false;
+    }
+    
+    lastActionTimes.current[actionType] = now;
+    return true;
+  }, []);
 
   // Progress update handler
   const handleProgressUpdate = useCallback((position, totalDuration) => {
-    if (!isSeeking) {
+    if (playbackState !== PLAYBACK_STATES.SEEKING) {
       setProgress(position);
       setDuration(totalDuration);
     }
-  }, [isSeeking]);
+  }, [playbackState]);
 
   // Play/pause handler
   const handlePlayPause = useCallback(async () => {
@@ -125,46 +157,46 @@ export default function usePlaybackController({
       return;
     }
 
+    if (!isActionAllowed('playPause')) return;
     if (isStateUpdateInProgress.current) {
       debug.log('State update already in progress, ignoring play/pause request');
       return;
     }
-
-    if (sdkStatus !== 'ready') {
+    if (sdkStatus !== SDK_STATES.READY) {
       setError('Spotify player is not ready. Please wait or refresh the page.');
       return;
     }
 
     try {
       isStateUpdateInProgress.current = true;
-      setIsLoading(true);
+      setPlaybackState(PLAYBACK_STATES.LOADING);
+      
       const player = spotifyPlayerRef?.current;
       if (player) {
-        if (isPlaying) {
+        if (playbackState === PLAYBACK_STATES.PLAYING) {
           debug.log('Pausing track');
           await player.pause();
-          setIsPlaying(false);
+          setPlaybackState(PLAYBACK_STATES.PAUSED);
         } else {
           debug.log('Resuming track');
           await player.resume();
-          setIsPlaying(true);
+          setPlaybackState(PLAYBACK_STATES.PLAYING);
         }
       } else {
         debug.log('No player available');
         setError('Playback device not available. Please select a device.');
+        setPlaybackState(PLAYBACK_STATES.ERROR);
       }
     } catch (error) {
       debug.logError(error, 'handlePlayPause');
-      if (error.message.includes('404')) {
-        setError('Failed to load track. Please try again.');
-      } else {
-        setError(error.message || 'Failed to control playback. Please try again.');
-      }
+      setError(error.message.includes('404') 
+        ? 'Failed to load track. Please try again.'
+        : 'Failed to control playback. Please try again.');
+      setPlaybackState(PLAYBACK_STATES.ERROR);
     } finally {
-      setIsLoading(false);
       isStateUpdateInProgress.current = false;
     }
-  }, [currentTrack, isPlaying, spotifyPlayerRef, sdkStatus]);
+  }, [currentTrack, playbackState, spotifyPlayerRef, sdkStatus, isActionAllowed]);
 
   // Seek handler
   const handleSeek = useCallback(async (position) => {
@@ -173,46 +205,39 @@ export default function usePlaybackController({
       return;
     }
 
+    if (!isActionAllowed('seek')) return;
     if (isStateUpdateInProgress.current) {
       debug.log('State update already in progress, ignoring seek request');
       return;
     }
-
-    if (sdkStatus !== 'ready') {
+    if (sdkStatus !== SDK_STATES.READY) {
       setError('Spotify player is not ready. Please wait or refresh the page.');
       return;
     }
 
     try {
       isStateUpdateInProgress.current = true;
-      setIsLoading(true);
+      setPlaybackState(PLAYBACK_STATES.SEEKING);
+      
       const player = spotifyPlayerRef?.current;
       if (player) {
         debug.log('Seeking to position', { position });
         await player.seek(position);
         setProgress(position);
+        setPlaybackState(PLAYBACK_STATES.PLAYING);
       } else {
         debug.log('No player available for seek');
         setError('Playback device not available. Please select a device.');
+        setPlaybackState(PLAYBACK_STATES.ERROR);
       }
     } catch (error) {
       debug.logError(error, 'handleSeek');
       setError('Failed to seek. Please try again.');
+      setPlaybackState(PLAYBACK_STATES.ERROR);
     } finally {
-      setIsLoading(false);
       isStateUpdateInProgress.current = false;
     }
-  }, [currentTrack, spotifyPlayerRef, sdkStatus]);
-
-  // Skip next/previous handlers
-  const handleSkipNext = useCallback(() => {
-    debug.log('Skip next called');
-    // Implement skip next logic
-  }, []);
-  const handleSkipPrevious = useCallback(() => {
-    debug.log('Skip previous called');
-    // Implement skip previous logic
-  }, []);
+  }, [currentTrack, spotifyPlayerRef, sdkStatus, isActionAllowed]);
 
   // Volume change handler
   const handleVolumeChange = useCallback(async (newVolume) => {
@@ -221,19 +246,18 @@ export default function usePlaybackController({
       return;
     }
 
+    if (!isActionAllowed('volume')) return;
     if (isStateUpdateInProgress.current) {
       debug.log('State update already in progress, ignoring volume change request');
       return;
     }
-
-    if (sdkStatus !== 'ready') {
+    if (sdkStatus !== SDK_STATES.READY) {
       setError('Spotify player is not ready. Please wait or refresh the page.');
       return;
     }
 
     try {
       isStateUpdateInProgress.current = true;
-      setIsLoading(true);
       const player = spotifyPlayerRef?.current;
       if (player) {
         debug.log('Setting volume', { newVolume });
@@ -247,31 +271,47 @@ export default function usePlaybackController({
       debug.logError(error, 'handleVolumeChange');
       setError('Failed to adjust volume. Please try again.');
     } finally {
-      setIsLoading(false);
       isStateUpdateInProgress.current = false;
     }
-  }, [currentTrack, spotifyPlayerRef, sdkStatus]);
+  }, [currentTrack, spotifyPlayerRef, sdkStatus, isActionAllowed]);
+
+  // Skip handlers
+  const handleSkipNext = useCallback(() => {
+    debug.log('Skip next called');
+    // Implement skip next logic
+  }, []);
+  
+  const handleSkipPrevious = useCallback(() => {
+    debug.log('Skip previous called');
+    // Implement skip previous logic
+  }, []);
 
   return {
+    // State
+    playbackState,
     currentTrack,
-    setCurrentTrack,
-    isPlaying,
-    setIsPlaying,
     progress,
-    setProgress,
     duration,
-    setDuration,
     volume,
-    setVolume: handleVolumeChange,
     error,
+    sdkStatus,
+    
+    // Setters
+    setCurrentTrack,
+    setProgress,
+    setDuration,
+    setVolume: handleVolumeChange,
     setError,
-    isLoading,
-    setIsLoading,
+    
+    // Handlers
     handlePlayPause,
     handleSeek,
     handleSkipNext,
     handleSkipPrevious,
     handleProgressUpdate,
-    sdkStatus
+    
+    // Constants
+    PLAYBACK_STATES,
+    SDK_STATES
   };
 } 
