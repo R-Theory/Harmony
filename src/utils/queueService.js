@@ -329,7 +329,21 @@ class QueueService {
       // Get current Spotify queue
       const { queue: spotifyQueue } = await getQueue(accessToken);
       
-      // Add any tracks from our queue that aren't in Spotify's queue
+      // First, clear any tracks from Spotify's queue that aren't in our queue
+      for (const spotifyTrack of spotifyQueue) {
+        if (!queue.some(track => track.uri === spotifyTrack.uri)) {
+          try {
+            await skipToNext(accessToken);
+            console.log('Spotify: Removed track from queue:', spotifyTrack.name);
+            // Add a small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error) {
+            console.error('Spotify: Error removing track from queue:', error);
+          }
+        }
+      }
+
+      // Then, add any tracks from our queue that aren't in Spotify's queue
       for (const track of queue) {
         if (track.source === 'spotify' && !spotifyQueue.some(qt => qt.uri === track.uri)) {
           try {

@@ -409,9 +409,18 @@ export default function Session() {
       nextTrack: queue[1]
     });
     
-    const newQueue = queue.slice(1);
-    setQueue(newQueue);
-    await syncQueueWithSpotify(newQueue);
+    try {
+      // Get the next track
+      const nextTrack = queue[1];
+      
+      // Update the queue in the service
+      await queueService.removeFromQueue(queue[0]);
+      
+      // The queue update callback will handle syncing with Spotify
+    } catch (error) {
+      debug.logError('[DEBUG][Session] Error skipping to next track:', error);
+      showQueueNotification('Failed to skip to next track', 'error');
+    }
   };
 
   // Update handleAddToQueue to use the sync function
