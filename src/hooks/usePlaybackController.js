@@ -158,13 +158,13 @@ export default function usePlaybackController({
   // Play/pause handler
   const handlePlayPause = useCallback(async () => {
     if (!currentTrack) {
-      debug.log('No track to play/pause');
+      debug.log('[DEBUG][usePlaybackController][handlePlayPause] No track to play/pause');
       return;
     }
 
     if (!isActionAllowed('playPause')) return;
     if (isStateUpdateInProgress.current) {
-      debug.log('State update already in progress, ignoring play/pause request');
+      debug.log('[DEBUG][usePlaybackController][handlePlayPause] State update already in progress, ignoring play/pause request');
       return;
     }
     if (sdkStatus !== SDK_STATES.READY) {
@@ -180,21 +180,23 @@ export default function usePlaybackController({
       const player = spotifyPlayerRef?.current;
       if (player) {
         if (playbackState === PLAYBACK_STATES.PLAYING) {
-          debug.log('Pausing track');
+          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Calling player.pause() from PlayerBar button or user action');
           await player.pause();
+          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Site is now pausing music (pause successful)');
           setPlaybackState(PLAYBACK_STATES.PAUSED);
         } else {
-          debug.log('Resuming track');
+          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Calling player.resume() from PlayerBar button or user action');
           await player.resume();
+          debug.log('[DEBUG][usePlaybackController][handlePlayPause] Site is now playing music (resume successful)');
           setPlaybackState(PLAYBACK_STATES.PLAYING);
         }
       } else {
-        debug.log('No player available');
+        debug.log('[DEBUG][usePlaybackController][handlePlayPause] No player available');
         setError('Playback device not available. Please select a device.');
         setPlaybackState(PLAYBACK_STATES.ERROR);
       }
     } catch (error) {
-      debug.logError(error, 'handlePlayPause');
+      debug.logError(error, '[DEBUG][usePlaybackController][handlePlayPause] Error in play/pause');
       setError(error.message.includes('404') 
         ? 'Failed to load track. Please try again.'
         : 'Failed to control playback. Please try again.');

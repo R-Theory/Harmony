@@ -365,7 +365,7 @@ const MusicPlayer = ({
   // Handle play/pause
   const handlePlayPause = async () => {
     if (isLoading) {
-      debug.log('Playback operation already in progress');
+      debug.log('[DEBUG][MusicPlayer][handlePlayPause] Playback operation already in progress');
       return;
     }
 
@@ -387,17 +387,19 @@ const MusicPlayer = ({
       lastCommandTime.current = Date.now(); // Mark when we sent a command
 
       if (state.paused) {
-        debug.log('Resuming playback');
+        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Calling player.resume() from user action');
         await player.resume();
+        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Site is now playing music (resume successful)');
       } else {
-        debug.log('Pausing playback');
+        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Calling player.pause() from user action');
         await player.pause();
+        debug.log('[DEBUG][MusicPlayer][handlePlayPause] Site is now pausing music (pause successful)');
       }
 
       // Update local state
       onPlayPause(!state.paused);
     } catch (error) {
-      debug.logError(error, 'handlePlayPause');
+      debug.logError(error, '[DEBUG][MusicPlayer][handlePlayPause] Error in play/pause');
       setError(error.message);
     } finally {
       setIsLoading(false);

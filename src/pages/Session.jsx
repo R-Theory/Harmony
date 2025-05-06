@@ -332,10 +332,7 @@ export default function Session() {
           
           // Only update current track if it's different
           if (!currentTrack || currentTrack.uri !== mappedTrack.uri) {
-            debug.log('Updating current track', {
-              previousTrack: currentTrack,
-              newTrack: mappedTrack
-            });
+            debug.log('[DEBUG][Session][currentTrack] Current track set/changed:', mappedTrack);
             setCurrentTrack(mappedTrack);
             // Don't automatically set isPlaying - let the Spotify player state handle it
           }
@@ -357,13 +354,11 @@ export default function Session() {
   // Playback control handlers
   const handlePlayPause = () => {
     if (!currentTrack) return;
-    
-    debug.log('Play/Pause triggered', {
+    debug.log('[DEBUG][Session][PlayerBar] User clicked play/pause button', {
       currentTrack,
       wasPlaying: isPlaying,
       willPlay: !isPlaying
     });
-    
     setIsPlaying(prev => !prev);
   };
 
@@ -725,6 +720,7 @@ export default function Session() {
 
   const handleAddToQueue = async (track) => {
     try {
+      debug.log('[DEBUG][Session][queueService] Song added to queue:', track);
       await queueService.addToQueue(track);
       showQueueNotification(`Added "${track.name}" to session queue`);
     } catch (error) {
