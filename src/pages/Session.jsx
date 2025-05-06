@@ -321,7 +321,11 @@ export default function Session() {
               ? (Array.isArray(track.artists)
                   ? track.artists.map(a => a.name).join(', ')
                   : track.artists)
-              : track.artist || ''
+              : track.artist || '',
+            albumArt: track.album?.images?.[0]?.url,
+            source: 'spotify',
+            uri: track.uri,
+            duration: track.duration_ms
           };
           
           debug.log('Queue update received', {
@@ -634,7 +638,10 @@ export default function Session() {
               ...state.track_window.current_track,
               title: state.track_window.current_track.name,
               artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
-              source: 'spotify'
+              albumArt: state.track_window.current_track.album?.images?.[0]?.url,
+              source: 'spotify',
+              uri: state.track_window.current_track.uri,
+              duration: state.track_window.current_track.duration_ms
             };
             setCurrentTrack(currentTrack);
           } else {
