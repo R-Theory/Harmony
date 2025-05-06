@@ -720,9 +720,16 @@ export default function Session() {
       return;
     }
 
+    // Initialize isPlaying to false if it's undefined
+    if (isPlaying === undefined) {
+      debug.log('[Playback] isPlaying is undefined, initializing to false');
+      setIsPlaying(false);
+      return;
+    }
+
     // Only proceed if we have a valid track and we're trying to play it
-    if (isPlaying === false || isPlaying === undefined) {
-      debug.log('[Playback] Not playing or undefined state, skipping playback initialization');
+    if (isPlaying === false) {
+      debug.log('[Playback] Not playing, skipping playback initialization');
       return;
     }
 
