@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { addToQueue as spotifyAddToQueue, skipToNext } from './spotify';
+import { addToQueue as spotifyAddToQueue, skipToNext, getQueue } from './spotify';
 
 class QueueService {
   constructor() {

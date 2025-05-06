@@ -325,20 +325,34 @@ export default function Session() {
             newUri: mappedTrack.uri 
           });
           
-          // Pause current playback
-          await spotifyPlayerRef.current.pause();
-          // Wait for pause to take effect
-          await new Promise(resolve => setTimeout(resolve, 500));
-          // Load the new track
-          await spotifyPlayerRef.current.load(mappedTrack.uri);
-          // Wait for load to complete
-          await new Promise(resolve => setTimeout(resolve, 500));
-          // Ensure it's paused
-          await spotifyPlayerRef.current.pause();
-          
-          // Update our state
-          setCurrentTrack(mappedTrack);
-          setIsPlaying(false);
+          try {
+            // Pause current playback
+            await spotifyPlayerRef.current.pause();
+            // Wait for pause to take effect
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // Load the new track
+            await spotifyPlayerRef.current.load(mappedTrack.uri);
+            // Wait for load to complete
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // Ensure it's paused
+            await spotifyPlayerRef.current.pause();
+            
+            // Update our state
+            setCurrentTrack(mappedTrack);
+            setIsPlaying(false);
+          } catch (error) {
+            debug.logError('[DEBUG][Session] Error loading track:', error);
+            // If we get a 404, try to refresh the token
+            if (error.message?.includes('404')) {
+              const accessToken = localStorage.getItem('spotify_access_token');
+              if (accessToken) {
+                debug.log('[DEBUG][Session] Refreshing Spotify token due to 404 error');
+                localStorage.removeItem('spotify_access_token');
+                window.location.reload();
+                return;
+              }
+            }
+          }
         }
       } else {
         // If queue is empty, clear the current track
