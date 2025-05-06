@@ -9,8 +9,6 @@ const debug = new DebugLogger('PlayerContainer');
 const PlayerContainer = ({
   currentTrack: initialTrack,
   selectedPlaybackDevice,
-  isPlaying: initialIsPlaying,
-  setIsPlaying: parentSetIsPlaying,
   onSkipNext,
   onSkipPrevious,
   volume: initialVolume,
@@ -22,7 +20,6 @@ const PlayerContainer = ({
 }) => {
   const playback = usePlaybackController({
     initialTrack,
-    initialIsPlaying,
     initialVolume,
     spotifyPlayerRef,
     appleMusicUserToken
@@ -31,16 +28,11 @@ const PlayerContainer = ({
   React.useEffect(() => {
     debug.log('PlayerContainer rendered', {
       track: playback.currentTrack,
-      isPlaying: playback.isPlaying,
+      playbackState: playback.playbackState,
       volume: playback.volume,
       selectedPlaybackDevice
     });
-  }, [playback.currentTrack, playback.isPlaying, playback.volume, selectedPlaybackDevice]);
-
-  // Sync with parent state
-  React.useEffect(() => {
-    if (parentSetIsPlaying) parentSetIsPlaying(playback.isPlaying);
-  }, [playback.isPlaying, parentSetIsPlaying]);
+  }, [playback.currentTrack, playback.playbackState, playback.volume, selectedPlaybackDevice]);
 
   React.useEffect(() => {
     if (parentSetVolume) parentSetVolume(playback.volume);
@@ -53,19 +45,12 @@ const PlayerContainer = ({
     }
   }, [initialTrack]);
 
-  // Update playback state when isPlaying changes
-  React.useEffect(() => {
-    if (initialIsPlaying !== undefined) {
-      playback.setIsPlaying(initialIsPlaying);
-    }
-  }, [initialIsPlaying]);
-
   return (
     <>
       <PlayerBar
         currentTrack={playback.currentTrack}
         selectedPlaybackDevice={selectedPlaybackDevice}
-        isPlaying={playback.isPlaying}
+        isPlaying={playback.playbackState === playback.PLAYBACK_STATES.PLAYING}
         onPlayPause={playback.handlePlayPause}
         onSkipNext={onSkipNext}
         onSkipPrevious={onSkipPrevious}
@@ -77,7 +62,7 @@ const PlayerContainer = ({
       />
       <MusicPlayer
         track={playback.currentTrack}
-        isPlaying={playback.isPlaying}
+        isPlaying={playback.playbackState === playback.PLAYBACK_STATES.PLAYING}
         onPlayPause={playback.handlePlayPause}
         onSkipNext={onSkipNext}
         onSkipPrevious={onSkipPrevious}
