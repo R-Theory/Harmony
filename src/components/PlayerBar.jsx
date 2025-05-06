@@ -151,7 +151,9 @@ const PlayerBar = ({
     deviceHasSpotify: selectedPlaybackDevice?.hasSpotify,
     deviceHasAppleMusic: selectedPlaybackDevice?.hasAppleMusic,
     spotifySdkLoaded: !!window.Spotify,
-    isDisabled
+    isDisabled,
+    trackName: currentTrack?.name || currentTrack?.title,
+    artistName: currentTrack?.artists?.map(a => a.name).join(', ') || currentTrack?.artist
   });
 
   const getDisabledReason = () => {

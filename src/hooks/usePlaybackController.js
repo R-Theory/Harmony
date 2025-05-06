@@ -18,6 +18,7 @@ export default function usePlaybackController({
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const stateUpdateTimeout = useRef(null);
+  const [isSeeking, setIsSeeking] = useState(false);
 
   // Update currentTrack when initialTrack changes
   useEffect(() => {
@@ -72,9 +73,11 @@ export default function usePlaybackController({
   // Progress update handler
   const handleProgressUpdate = useCallback((position, totalDuration) => {
     debug.log('Progress updated', { position, totalDuration });
-    setProgress(position);
-    setDuration(totalDuration);
-  }, []);
+    if (!isSeeking) {
+      setProgress(position);
+      setDuration(totalDuration);
+    }
+  }, [isSeeking]);
 
   // Play/pause handler
   const handlePlayPause = useCallback(async () => {
@@ -90,15 +93,22 @@ export default function usePlaybackController({
       const player = spotifyPlayerRef?.current;
       if (player) {
         if (isPlaying) {
+          debug.log('Pausing track');
           await player.pause();
+          setIsPlaying(false);
         } else {
+          debug.log('Resuming track');
           await player.resume();
+          setIsPlaying(true);
         }
+      } else {
+        debug.log('No player available');
+        setError('Playback device not available');
       }
-      setIsPlaying(prev => !prev);
     } catch (error) {
       debug.logError(error, 'handlePlayPause');
       setError(error.message);
+      // Don't update isPlaying state on error
     } finally {
       setIsLoading(false);
     }
@@ -107,20 +117,29 @@ export default function usePlaybackController({
   // Seek handler
   const handleSeek = useCallback(async (position) => {
     debug.log('Seek called', { position });
+    if (!currentTrack) {
+      debug.log('No track to seek');
+      return;
+    }
+
     try {
       setIsLoading(true);
       const player = spotifyPlayerRef?.current;
       if (player) {
+        debug.log('Seeking to position', { position });
         await player.seek(position);
+        setProgress(position);
+      } else {
+        debug.log('No player available for seek');
+        setError('Playback device not available');
       }
-      setProgress(position);
     } catch (error) {
       debug.logError(error, 'handleSeek');
       setError(error.message);
     } finally {
       setIsLoading(false);
     }
-  }, [spotifyPlayerRef]);
+  }, [currentTrack, spotifyPlayerRef]);
 
   // Skip next/previous handlers
   const handleSkipNext = useCallback(() => {
@@ -135,20 +154,29 @@ export default function usePlaybackController({
   // Volume change handler
   const handleVolumeChange = useCallback(async (newVolume) => {
     debug.log('Volume changed', { newVolume });
+    if (!currentTrack) {
+      debug.log('No track to adjust volume');
+      return;
+    }
+
     try {
       setIsLoading(true);
       const player = spotifyPlayerRef?.current;
       if (player) {
+        debug.log('Setting volume', { newVolume });
         await player.setVolume(newVolume / 100);
+        setVolume(newVolume);
+      } else {
+        debug.log('No player available for volume change');
+        setError('Playback device not available');
       }
-      setVolume(newVolume);
     } catch (error) {
       debug.logError(error, 'handleVolumeChange');
       setError(error.message);
     } finally {
       setIsLoading(false);
     }
-  }, [spotifyPlayerRef]);
+  }, [currentTrack, spotifyPlayerRef]);
 
   return {
     currentTrack,
