@@ -39,6 +39,7 @@ export default function usePlaybackController({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(initialVolume);
   const [error, setError] = useState(null);
+  const stateUpdateTimeout = useRef(null);
 
   // SDK state
   const [sdkStatus, setSdkStatus] = useState(SDK_STATES.INITIALIZING);
