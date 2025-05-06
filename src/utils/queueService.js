@@ -339,6 +339,12 @@ class QueueService {
             await new Promise(resolve => setTimeout(resolve, 100));
           } catch (error) {
             console.error('Spotify: Error removing track from queue:', error);
+            // If we get a 404, try to refresh the token
+            if (error.message?.includes('404')) {
+              localStorage.removeItem('spotify_access_token');
+              window.location.reload();
+              return;
+            }
           }
         }
       }
@@ -353,11 +359,22 @@ class QueueService {
             await new Promise(resolve => setTimeout(resolve, 100));
           } catch (error) {
             console.error('Spotify: Error syncing track:', error);
+            // If we get a 404, try to refresh the token
+            if (error.message?.includes('404')) {
+              localStorage.removeItem('spotify_access_token');
+              window.location.reload();
+              return;
+            }
           }
         }
       }
     } catch (error) {
       console.error('Spotify: Error syncing queue:', error);
+      // If we get a 404, try to refresh the token
+      if (error.message?.includes('404')) {
+        localStorage.removeItem('spotify_access_token');
+        window.location.reload();
+      }
     }
   }
 }

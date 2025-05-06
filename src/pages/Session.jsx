@@ -631,7 +631,8 @@ export default function Session() {
       spotifyPlayer = new window.Spotify.Player({
         name: 'Harmony Web Player',
         getOAuthToken: cb => { cb(token); },
-        volume: 0.8
+        volume: 0.8,
+        enableMediaSession: true
       });
 
       spotifyPlayer.addListener('ready', ({ device_id }) => {
@@ -639,35 +640,13 @@ export default function Session() {
         spotifyPlayerRef.current = spotifyPlayer;
         setSpotifyDeviceId(device_id);
         
-        // Transfer playback to this device with rate limiting and error handling
+        // Transfer playback to this device
         makeSpotifyApiCall('/v1/me/player', {
           method: 'PUT',
           body: JSON.stringify({ device_ids: [device_id], play: false })
         }).catch(error => {
           if (error.message.includes('404')) {
             debug.log('[Spotify] Cloud Playback API endpoint not found - this is expected');
-          } else if (error.message.includes('500')) {
-            debug.log('[Spotify] Server error during playback transfer - retrying...');
-            // Retry with exponential backoff
-            let retryCount = 0;
-            const maxRetries = 3;
-            const retry = () => {
-              if (retryCount < maxRetries) {
-                const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
-                debug.log(`[Spotify] Retrying playback transfer in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-                setTimeout(() => {
-                  retryCount++;
-                  makeSpotifyApiCall('/v1/me/player', {
-                    method: 'PUT',
-                    body: JSON.stringify({ device_ids: [device_id], play: false })
-                  }).catch(e => {
-                    if (retryCount < maxRetries) retry();
-                    else debug.logError('[Spotify] Failed to transfer playback after retries:', e);
-                  });
-                }, delay);
-              }
-            };
-            retry();
           } else {
             debug.logError('[Spotify] Error transferring playback:', error);
           }
@@ -704,7 +683,18 @@ export default function Session() {
       });
 
       spotifyPlayer.addListener('account_error', e => debug.logError('[Spotify SDK] Account error', e));
-      spotifyPlayer.addListener('playback_error', e => debug.logError('[Spotify SDK] Playback error', e));
+      spotifyPlayer.addListener('playback_error', e => {
+        debug.logError('[Spotify SDK] Playback error', e);
+        // If we get a 404, try to refresh the token
+        if (e.message?.includes('404')) {
+          const accessToken = localStorage.getItem('spotify_access_token');
+          if (accessToken) {
+            debug.log('[Spotify] Refreshing token due to 404 error');
+            localStorage.removeItem('spotify_access_token');
+            window.location.reload();
+          }
+        }
+      });
       
       // Add playback state listeners
       spotifyPlayer.addListener('player_state_changed', state => {
@@ -724,25 +714,20 @@ export default function Session() {
             setCurrentTrack(currentTrack);
             setProgress(state.position);
             setDuration(state.duration);
+            setIsPlaying(!state.paused);
           } else {
             // If no track, ensure we're not playing
             setCurrentTrack(null);
             setProgress(0);
             setDuration(0);
+            setIsPlaying(false);
           }
         } else {
           // If no state, ensure we're not playing
           setCurrentTrack(null);
           setProgress(0);
           setDuration(0);
-        }
-      });
-
-      // Add progress update listener
-      spotifyPlayer.addListener('progress', ({ position, duration }) => {
-        if (currentTrack) {  // Only update progress if we have a current track
-          setProgress(position);
-          setDuration(duration);
+          setIsPlaying(false);
         }
       });
 
