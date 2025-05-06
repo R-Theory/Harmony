@@ -139,7 +139,19 @@ const PlayerBar = ({
   }, [currentTrack, isPlaying, onPlayPause]);
 
   // Disable buttons when there's no track or no playback device
-  const isDisabled = !currentTrack || !selectedPlaybackDevice;
+  const isDisabled = !currentTrack || !selectedPlaybackDevice || (
+    currentTrack.source === 'spotify' && !selectedPlaybackDevice.hasSpotify
+  ) || (
+    currentTrack.source === 'appleMusic' && !selectedPlaybackDevice.hasAppleMusic
+  );
+
+  const getDisabledReason = () => {
+    if (!currentTrack) return "No track in queue";
+    if (!selectedPlaybackDevice) return "No playback device selected";
+    if (currentTrack.source === 'spotify' && !selectedPlaybackDevice.hasSpotify) return "Selected device cannot play Spotify tracks";
+    if (currentTrack.source === 'appleMusic' && !selectedPlaybackDevice.hasAppleMusic) return "Selected device cannot play Apple Music tracks";
+    return "";
+  };
 
   const formatTime = (ms) => {
     if (!ms) return '0:00';
@@ -199,7 +211,7 @@ const PlayerBar = ({
               <IconButton 
                 onClick={onSkipPrevious} 
                 disabled={isDisabled}
-                title={isDisabled ? "Select a playback device to enable controls" : "Previous track"}
+                title={isDisabled ? getDisabledReason() : "Previous track"}
               >
                 <SkipPrevious />
               </IconButton>
@@ -207,14 +219,14 @@ const PlayerBar = ({
                 onClick={onPlayPause}
                 disabled={isDisabled}
                 sx={{ mx: 2 }}
-                title={isDisabled ? "Select a playback device to enable controls" : (isPlaying ? "Pause" : "Play")}
+                title={isDisabled ? getDisabledReason() : (isPlaying ? "Pause" : "Play")}
               >
                 {isPlaying ? <Pause /> : <PlayArrow />}
               </IconButton>
               <IconButton 
                 onClick={onSkipNext} 
                 disabled={isDisabled}
-                title={isDisabled ? "Select a playback device to enable controls" : "Next track"}
+                title={isDisabled ? getDisabledReason() : "Next track"}
               >
                 <SkipNext />
               </IconButton>
