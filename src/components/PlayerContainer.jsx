@@ -8,6 +8,7 @@ const debug = new DebugLogger('PlayerContainer');
 
 const PlayerContainer = ({
   currentTrack: initialTrack,
+  selectedPlaybackDevice,
   isPlaying: initialIsPlaying,
   setIsPlaying: parentSetIsPlaying, // for parent sync if needed
   onSkipNext,
@@ -31,9 +32,10 @@ const PlayerContainer = ({
     debug.log('PlayerContainer rendered', {
       track: playback.currentTrack,
       isPlaying: playback.isPlaying,
-      volume: playback.volume
+      volume: playback.volume,
+      selectedPlaybackDevice
     });
-  }, [playback.currentTrack, playback.isPlaying, playback.volume]);
+  }, [playback.currentTrack, playback.isPlaying, playback.volume, selectedPlaybackDevice]);
 
   // Optionally sync with parent state
   React.useEffect(() => {
@@ -47,6 +49,7 @@ const PlayerContainer = ({
     <>
       <PlayerBar
         currentTrack={playback.currentTrack}
+        selectedPlaybackDevice={selectedPlaybackDevice}
         isPlaying={playback.isPlaying}
         onPlayPause={playback.handlePlayPause}
         onSkipNext={playback.handleSkipNext}

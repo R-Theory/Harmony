@@ -1119,6 +1119,7 @@ export default function Session() {
       {console.log('[DEBUG] Rendering PlayerBar with currentTrack:', currentTrack)}
       <PlayerContainer
         currentTrack={currentTrack}
+        selectedPlaybackDevice={selectedPlaybackDevice}
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
         onSkipNext={handleSkipNext}

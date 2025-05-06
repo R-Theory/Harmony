@@ -27,6 +27,7 @@ const VOLUME_RATE_LIMIT = 500; // 500ms between volume changes
 
 const PlayerBar = ({
   currentTrack,
+  selectedPlaybackDevice,
   isPlaying,
   onPlayPause,
   onSkipNext,
@@ -137,8 +138,8 @@ const PlayerBar = ({
     }
   }, [currentTrack, isPlaying, onPlayPause]);
 
-  // Disable buttons when there's no track
-  const isDisabled = !currentTrack;
+  // Disable buttons when there's no track or no playback device
+  const isDisabled = !currentTrack || !selectedPlaybackDevice;
 
   const formatTime = (ms) => {
     if (!ms) return '0:00';
@@ -195,17 +196,26 @@ const PlayerBar = ({
         <Grid item xs={12} sm={4}>
           <Box display="flex" flexDirection="column" alignItems="center">
             <Box display="flex" alignItems="center" mb={1}>
-              <IconButton onClick={onSkipPrevious} disabled={isDisabled}>
+              <IconButton 
+                onClick={onSkipPrevious} 
+                disabled={isDisabled}
+                title={isDisabled ? "Select a playback device to enable controls" : "Previous track"}
+              >
                 <SkipPrevious />
               </IconButton>
               <IconButton
                 onClick={onPlayPause}
                 disabled={isDisabled}
                 sx={{ mx: 2 }}
+                title={isDisabled ? "Select a playback device to enable controls" : (isPlaying ? "Pause" : "Play")}
               >
                 {isPlaying ? <Pause /> : <PlayArrow />}
               </IconButton>
-              <IconButton onClick={onSkipNext} disabled={isDisabled}>
+              <IconButton 
+                onClick={onSkipNext} 
+                disabled={isDisabled}
+                title={isDisabled ? "Select a playback device to enable controls" : "Next track"}
+              >
                 <SkipNext />
               </IconButton>
             </Box>
@@ -268,13 +278,20 @@ PlayerBar.propTypes = {
     preview_url: PropTypes.string,
     is_playable: PropTypes.bool.isRequired
   }),
+  selectedPlaybackDevice: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    isHost: PropTypes.bool.isRequired,
+    hasSpotify: PropTypes.bool.isRequired,
+    hasAppleMusic: PropTypes.bool.isRequired
+  }),
   isPlaying: PropTypes.bool.isRequired,
-  onPlayPause: PropTypes.func,
-  onSkipNext: PropTypes.func,
-  onSkipPrevious: PropTypes.func,
+  onPlayPause: PropTypes.func.isRequired,
+  onSkipNext: PropTypes.func.isRequired,
+  onSkipPrevious: PropTypes.func.isRequired,
   volume: PropTypes.number.isRequired,
-  onVolumeChange: PropTypes.func,
-  onSeek: PropTypes.func,
+  onVolumeChange: PropTypes.func.isRequired,
+  onSeek: PropTypes.func.isRequired,
   progress: PropTypes.number,
   duration: PropTypes.number
 };
