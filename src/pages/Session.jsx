@@ -671,13 +671,11 @@ export default function Session() {
   useEffect(() => {
     // Don't proceed if session is not fully initialized
     if (!spotifyReady || !selectedPlaybackDevice) {
-      debug.log('[Playback] Session not fully initialized');
       return;
     }
 
     // Don't proceed if there's no track or device
     if (!currentTrack || !selectedPlaybackDevice) {
-      debug.log('[Playback] No current track or selected device:', { currentTrack, selectedPlaybackDevice });
       return;
     }
 
@@ -693,6 +691,45 @@ export default function Session() {
       });
     }
   }, [currentTrack, selectedPlaybackDevice, isPlaying, spotifyReady]);
+
+  // Add Spotify player state change handler
+  useEffect(() => {
+    if (!spotifyPlayerRef.current) return;
+
+    const handlePlayerStateChange = (state) => {
+      if (!state) return;
+      
+      // Only update if the state actually changed
+      const newIsPlaying = !state.paused;
+      if (newIsPlaying !== isPlaying) {
+        setIsPlaying(newIsPlaying);
+      }
+
+      // Update track info if needed
+      if (state.track_window?.current_track) {
+        const currentTrack = {
+          ...state.track_window.current_track,
+          title: state.track_window.current_track.name,
+          artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
+          albumArt: state.track_window.current_track.album?.images?.[0]?.url,
+          source: 'spotify',
+          uri: state.track_window.current_track.uri,
+          duration: state.track_window.current_track.duration_ms
+        };
+        setCurrentTrack(currentTrack);
+        setProgress(state.position);
+        setDuration(state.duration);
+      }
+    };
+
+    spotifyPlayerRef.current.addListener('player_state_changed', handlePlayerStateChange);
+
+    return () => {
+      if (spotifyPlayerRef.current) {
+        spotifyPlayerRef.current.removeListener('player_state_changed', handlePlayerStateChange);
+      }
+    };
+  }, [spotifyPlayerRef.current, isPlaying]);
 
   // Handle queue updates
   const handleQueueUpdate = (newQueue) => {
