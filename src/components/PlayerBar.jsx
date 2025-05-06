@@ -113,7 +113,10 @@ const PlayerBar = ({
   // Update progress bar smoothly
   useEffect(() => {
     debug.log('Progress bar effect triggered', { isPlaying, currentTrack, duration });
-    if (!isPlaying || !currentTrack) return;
+    if (!isPlaying || !currentTrack) {
+      setLocalProgress(0);
+      return;
+    }
     
     const interval = setInterval(() => {
       setLocalProgress(prev => {
@@ -124,6 +127,17 @@ const PlayerBar = ({
     
     return () => clearInterval(interval);
   }, [isPlaying, currentTrack, duration]);
+
+  // Ensure isPlaying is false when there's no track
+  useEffect(() => {
+    if (!currentTrack && isPlaying) {
+      debug.log('No track but isPlaying is true, setting to false');
+      onPlayPause();
+    }
+  }, [currentTrack, isPlaying, onPlayPause]);
+
+  // Disable buttons when there's no track
+  const isDisabled = !currentTrack;
 
   const formatTime = (ms) => {
     if (!ms) return '0:00';
@@ -180,17 +194,17 @@ const PlayerBar = ({
         <Grid item xs={12} sm={4}>
           <Box display="flex" flexDirection="column" alignItems="center">
             <Box display="flex" alignItems="center" mb={1}>
-              <IconButton onClick={onSkipPrevious} disabled={!currentTrack}>
+              <IconButton onClick={onSkipPrevious} disabled={isDisabled}>
                 <SkipPrevious />
               </IconButton>
               <IconButton
                 onClick={onPlayPause}
-                disabled={!currentTrack}
+                disabled={isDisabled}
                 sx={{ mx: 2 }}
               >
                 {isPlaying ? <Pause /> : <PlayArrow />}
               </IconButton>
-              <IconButton onClick={onSkipNext} disabled={!currentTrack}>
+              <IconButton onClick={onSkipNext} disabled={isDisabled}>
                 <SkipNext />
               </IconButton>
             </Box>
@@ -202,7 +216,7 @@ const PlayerBar = ({
                 value={localProgress}
                 onChange={handleProgressChange}
                 max={duration}
-                disabled={!currentTrack}
+                disabled={isDisabled}
                 sx={{ mx: 2 }}
               />
               <Typography variant="body2" sx={{ minWidth: 40 }}>
@@ -219,7 +233,7 @@ const PlayerBar = ({
               onChange={handleVolumeChange}
               min={0}
               max={100}
-              disabled={!currentTrack}
+              disabled={isDisabled}
               sx={{ width: 100 }}
             />
             <VolumeUp />

@@ -39,9 +39,14 @@ export default function usePlaybackController({
 
   // Play/pause handler
   const handlePlayPause = useCallback(() => {
-    debug.log('Play/Pause toggled');
+    debug.log('Play/Pause toggled', { currentTrack, isPlaying });
+    if (!currentTrack) {
+      debug.log('No track to play/pause, setting isPlaying to false');
+      setIsPlaying(false);
+      return;
+    }
     setIsPlaying((prev) => !prev);
-  }, []);
+  }, [currentTrack]);
 
   // Seek handler
   const handleSeek = useCallback(async (position) => {
