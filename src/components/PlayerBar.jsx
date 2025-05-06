@@ -140,15 +140,14 @@ const PlayerBar = ({
 
   // Disable buttons when there's no track or no playback device
   const isDisabled = !currentTrack || !selectedPlaybackDevice || (
-    currentTrack.source === 'spotify' && !selectedPlaybackDevice.hasSpotify
-  ) || (
-    currentTrack.source === 'appleMusic' && !selectedPlaybackDevice.hasAppleMusic
+    (currentTrack.uri?.startsWith('spotify:') && !selectedPlaybackDevice.hasSpotify) ||
+    (currentTrack.uri?.startsWith('appleMusic:') && !selectedPlaybackDevice.hasAppleMusic)
   );
 
   debug.log('Button disabled state:', {
     hasTrack: !!currentTrack,
     hasDevice: !!selectedPlaybackDevice,
-    trackSource: currentTrack?.source,
+    trackUri: currentTrack?.uri,
     deviceHasSpotify: selectedPlaybackDevice?.hasSpotify,
     deviceHasAppleMusic: selectedPlaybackDevice?.hasAppleMusic,
     isDisabled
@@ -157,8 +156,8 @@ const PlayerBar = ({
   const getDisabledReason = () => {
     if (!currentTrack) return "No track in queue";
     if (!selectedPlaybackDevice) return "No playback device selected";
-    if (currentTrack.source === 'spotify' && !selectedPlaybackDevice.hasSpotify) return "Selected device cannot play Spotify tracks";
-    if (currentTrack.source === 'appleMusic' && !selectedPlaybackDevice.hasAppleMusic) return "Selected device cannot play Apple Music tracks";
+    if (currentTrack.uri?.startsWith('spotify:') && !selectedPlaybackDevice.hasSpotify) return "Selected device cannot play Spotify tracks";
+    if (currentTrack.uri?.startsWith('appleMusic:') && !selectedPlaybackDevice.hasAppleMusic) return "Selected device cannot play Apple Music tracks";
     return "";
   };
 
