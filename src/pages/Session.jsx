@@ -836,9 +836,15 @@ export default function Session() {
       if (isFirstTrack && track.source === 'spotify' && spotifyPlayerRef.current) {
         debug.log('[DEBUG][Session] First track added, handling sequence');
         try {
+          // First pause any current playback
+          await spotifyPlayerRef.current.pause();
+          // Wait a moment for the pause to take effect
           await new Promise(resolve => setTimeout(resolve, 500));
-          await spotifyPlayerRef.current.skipToNext();
+          // Load the track
+          await spotifyPlayerRef.current.load(track.uri);
+          // Wait for the track to load
           await new Promise(resolve => setTimeout(resolve, 500));
+          // Ensure it's paused
           await spotifyPlayerRef.current.pause();
           setIsPlaying(false);
           debug.log('[DEBUG][Session] First track sequence completed');
