@@ -28,14 +28,53 @@ export default function PlayerContainer({
   }, [currentTrack, isPlaying]);
 
   // Memoize the play/pause handler
-  const handlePlayPause = useCallback(() => {
+  const handlePlayPause = useCallback(async () => {
     if (!currentTrack) {
       debug.log('[PlayerContainer] No track to play/pause');
       return;
     }
     debug.log('[PlayerContainer] Play/pause clicked', { currentTrack, isPlaying });
-    setIsPlaying(!isPlaying);
-  }, [currentTrack, isPlaying, setIsPlaying]);
+    
+    try {
+      const player = spotifyPlayerRef?.current;
+      if (!player) {
+        debug.logError('[PlayerContainer] No Spotify player instance found');
+        throw new Error('No Spotify player instance');
+      }
+
+      // Get current state
+      debug.log('[PlayerContainer] Getting current player state');
+      const state = await player.getCurrentState();
+      debug.log('[PlayerContainer] Current player state:', state);
+
+      if (!state || state.paused) {
+        debug.log('[PlayerContainer] Attempting to resume playback');
+        await player.resume();
+        debug.log('[PlayerContainer] Playback resumed successfully');
+      } else {
+        debug.log('[PlayerContainer] Attempting to pause playback');
+        await player.pause();
+        debug.log('[PlayerContainer] Playback paused successfully');
+      }
+
+      // Update UI state
+      setIsPlaying(!isPlaying);
+      debug.log('[PlayerContainer] UI state updated', { newIsPlaying: !isPlaying });
+    } catch (error) {
+      debug.logError('[PlayerContainer] Error in play/pause:', error);
+      // If we get a 404, try to refresh the token
+      if (error.message?.includes('404')) {
+        const accessToken = localStorage.getItem('spotify_access_token');
+        if (accessToken) {
+          debug.log('[PlayerContainer] Refreshing Spotify token due to 404 error');
+          // Force token refresh by clearing it
+          localStorage.removeItem('spotify_access_token');
+          window.location.reload();
+          return;
+        }
+      }
+    }
+  }, [currentTrack, isPlaying, setIsPlaying, spotifyPlayerRef]);
 
   // Memoize the volume handler
   const handleVolumeChange = useCallback((newVolume) => {
