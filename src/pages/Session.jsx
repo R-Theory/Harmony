@@ -334,7 +334,18 @@ export default function Session() {
           if (!currentTrack || currentTrack.uri !== mappedTrack.uri) {
             debug.log('[DEBUG][Session][currentTrack] Current track set/changed:', mappedTrack);
             setCurrentTrack(mappedTrack);
-            // Don't automatically set isPlaying - let the Spotify player state handle it
+
+            // If this is the first track in the queue, skip current track and pause
+            if (updatedQueue.length === 1 && spotifyPlayerRef.current) {
+              debug.log('[DEBUG][Session] First track added, skipping current track and pausing');
+              spotifyPlayerRef.current.load(mappedTrack.uri).then(() => {
+                // Ensure the track is paused
+                spotifyPlayerRef.current.pause();
+                setIsPlaying(false);
+              }).catch(error => {
+                debug.logError('[DEBUG][Session] Error loading first track:', error);
+              });
+            }
           }
         } else {
           debug.log('Queue empty, clearing current track');
