@@ -302,6 +302,63 @@ export default function Session() {
     };
   }, [peerConnection]);
   
+  // Add the sync function before the queue callback useEffect
+  const syncQueueWithSpotify = async (newQueue) => {
+    if (!spotifyPlayerRef.current || !newQueue) return;
+    
+    try {
+      debug.log('[DEBUG][Session] Syncing queue with Spotify', { queueLength: newQueue.length });
+      
+      // Get current Spotify state
+      const state = await spotifyPlayerRef.current.getCurrentState();
+      const currentUri = state?.track_window?.current_track?.uri;
+      
+      // If we have a queue, ensure the first track is loaded
+      if (newQueue.length > 0) {
+        const firstTrack = newQueue[0];
+        const mappedTrack = normalizeSpotifyTrack(firstTrack);
+        
+        // If the current track is different from what we want, load the new track
+        if (currentUri !== mappedTrack.uri) {
+          debug.log('[DEBUG][Session] Loading new track', { 
+            currentUri, 
+            newUri: mappedTrack.uri 
+          });
+          
+          // Pause current playback
+          await spotifyPlayerRef.current.pause();
+          // Wait for pause to take effect
+          await new Promise(resolve => setTimeout(resolve, 500));
+          // Load the new track
+          await spotifyPlayerRef.current.load(mappedTrack.uri);
+          // Wait for load to complete
+          await new Promise(resolve => setTimeout(resolve, 500));
+          // Ensure it's paused
+          await spotifyPlayerRef.current.pause();
+          
+          // Update our state
+          setCurrentTrack(mappedTrack);
+          setIsPlaying(false);
+        }
+      } else {
+        // If queue is empty, clear the current track
+        if (currentUri) {
+          debug.log('[DEBUG][Session] Clearing current track');
+          await spotifyPlayerRef.current.pause();
+          setCurrentTrack(null);
+          setIsPlaying(false);
+          setProgress(0);
+          setDuration(0);
+        }
+      }
+      
+      debug.log('[DEBUG][Session] Queue sync completed');
+    } catch (error) {
+      debug.logError('[DEBUG][Session] Error syncing queue with Spotify:', error);
+    }
+  };
+
+  // Update the queue callback useEffect
   useEffect(() => {
     if (!queueService.socket) return;
 
@@ -319,57 +376,40 @@ export default function Session() {
         setLastQueueUpdate(now);
         setQueue(updatedQueue || []);
         
-        if (updatedQueue && updatedQueue.length > 0) {
-          const track = updatedQueue[0];
-          const mappedTrack = normalizeSpotifyTrack(track);
-          
-          debug.log('Queue update received', {
-            queueLength: updatedQueue.length,
-            currentTrack: mappedTrack,
-            previousTrack: currentTrack,
-            isPlaying
-          });
-          
-          // Only update current track if it's different
-          if (!currentTrack || currentTrack.uri !== mappedTrack.uri) {
-            debug.log('[DEBUG][Session][currentTrack] Current track set/changed:', mappedTrack);
-            setCurrentTrack(mappedTrack);
-
-            // If this is the first track in the queue, handle the sequence
-            if (updatedQueue.length === 1 && spotifyPlayerRef.current) {
-              debug.log('[DEBUG][Session] First track added, handling sequence');
-              try {
-                // First pause any current playback
-                await spotifyPlayerRef.current.pause();
-                // Wait a moment for the pause to take effect
-                await new Promise(resolve => setTimeout(resolve, 500));
-                // Load the track
-                await spotifyPlayerRef.current.load(mappedTrack.uri);
-                // Wait for the track to load
-                await new Promise(resolve => setTimeout(resolve, 500));
-                // Ensure it's paused
-                await spotifyPlayerRef.current.pause();
-                setIsPlaying(false);
-                debug.log('[DEBUG][Session] First track sequence completed');
-              } catch (error) {
-                debug.logError('[DEBUG][Session] Error in first track sequence:', error);
-              }
-            }
-          }
-        } else {
-          debug.log('Queue empty, clearing current track');
-          setCurrentTrack(null);
-          setIsPlaying(false);
-          setProgress(0);
-          setDuration(0);
-        }
+        // Sync the queue with Spotify
+        await syncQueueWithSpotify(updatedQueue);
       },
       (errorMessage) => {
         debug.logError(errorMessage, 'queueService');
         setError({ message: errorMessage });
       }
     );
-  }, [queueService.socket, currentTrack, isPlaying, lastQueueUpdate]);
+  }, [queueService.socket, lastQueueUpdate]);
+
+  // Update handleSkipNext to use the sync function
+  const handleSkipNext = async () => {
+    if (!queue || queue.length <= 1) return;
+    
+    debug.log('Skipping to next track', {
+      currentTrack,
+      nextTrack: queue[1]
+    });
+    
+    const newQueue = queue.slice(1);
+    setQueue(newQueue);
+    await syncQueueWithSpotify(newQueue);
+  };
+
+  // Update handleAddToQueue to use the sync function
+  const handleAddToQueue = async (track) => {
+    try {
+      debug.log('[DEBUG][Session][queueService] Song added to queue:', track);
+      await queueService.addToQueue(track);
+      showQueueNotification(`Added "${track.name}" to session queue`);
+    } catch (error) {
+      showQueueNotification(error.message, 'error');
+    }
+  };
 
   // Playback control handlers
   const handlePlayPause = async () => {
@@ -446,35 +486,6 @@ export default function Session() {
           return;
         }
       }
-    }
-  };
-
-  const handleSkipNext = () => {
-    if (!queue || queue.length <= 1) return;
-    
-    debug.log('Skipping to next track', {
-      currentTrack,
-      nextTrack: queue[1]
-    });
-    
-    const newQueue = queue.slice(1);
-    setQueue(newQueue);
-    if (newQueue.length > 0) {
-      const nextTrack = newQueue[0];
-      const mappedTrack = {
-        ...nextTrack,
-        title: nextTrack.name || nextTrack.title,
-        artist: nextTrack.artists
-          ? (Array.isArray(nextTrack.artists)
-              ? nextTrack.artists.map(a => a.name).join(', ')
-              : nextTrack.artists)
-          : nextTrack.artist || ''
-      };
-      setCurrentTrack(mappedTrack);
-      setIsPlaying(true);
-    } else {
-      setCurrentTrack(null);
-      setIsPlaying(false);
     }
   };
 
@@ -825,38 +836,6 @@ export default function Session() {
 
   const showQueueNotification = (message, severity = 'success') => {
     setQueueNotification({ open: true, message, severity });
-  };
-
-  const handleAddToQueue = async (track) => {
-    try {
-      debug.log('[DEBUG][Session][queueService] Song added to queue:', track);
-      const isFirstTrack = queue.length === 0;
-      await queueService.addToQueue(track);
-      
-      if (isFirstTrack && track.source === 'spotify' && spotifyPlayerRef.current) {
-        debug.log('[DEBUG][Session] First track added, handling sequence');
-        try {
-          // First pause any current playback
-          await spotifyPlayerRef.current.pause();
-          // Wait a moment for the pause to take effect
-          await new Promise(resolve => setTimeout(resolve, 500));
-          // Load the track
-          await spotifyPlayerRef.current.load(track.uri);
-          // Wait for the track to load
-          await new Promise(resolve => setTimeout(resolve, 500));
-          // Ensure it's paused
-          await spotifyPlayerRef.current.pause();
-          setIsPlaying(false);
-          debug.log('[DEBUG][Session] First track sequence completed');
-        } catch (error) {
-          debug.logError('[DEBUG][Session] Error in first track sequence:', error);
-        }
-      }
-      
-      showQueueNotification(`Added "${track.name}" to session queue`);
-    } catch (error) {
-      showQueueNotification(error.message, 'error');
-    }
   };
 
   const handleRemoveFromQueue = async (trackId) => {
