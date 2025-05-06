@@ -483,18 +483,19 @@ export default function Session() {
       document.body.appendChild(script);
       script.onload = () => {
         console.log('[Spotify SDK] Script loaded');
+        // Set ready state after script is loaded
+        setSpotifyReady(true);
       };
-    }
-    window.onSpotifyWebPlaybackSDKReady = () => {
+    } else {
+      // SDK already loaded
       setSpotifyReady(true);
-      console.log('[Spotify SDK] Ready');
-    };
+    }
   }, []);
 
   // Initialize Spotify Player when ready
   useEffect(() => {
     const token = localStorage.getItem('spotify_access_token');
-    if (token && !spotifyPlayerRef.current && !spotifyReady) {
+    if (token && !spotifyPlayerRef.current && spotifyReady && window.Spotify) {
       debug.log('Initializing Spotify player');
       initializeSpotifyPlayer(token);
     }
@@ -502,6 +503,10 @@ export default function Session() {
 
   const initializeSpotifyPlayer = (token) => {
     try {
+      if (!window.Spotify) {
+        throw new Error('Spotify SDK not loaded');
+      }
+
       spotifyPlayer = new window.Spotify.Player({
         name: 'Harmony Web Player',
         getOAuthToken: cb => { cb(token); },

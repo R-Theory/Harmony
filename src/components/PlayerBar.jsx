@@ -140,7 +140,7 @@ const PlayerBar = ({
 
   // Disable buttons when there's no track or no playback device
   const isDisabled = !currentTrack || !selectedPlaybackDevice || (
-    (currentTrack.uri?.startsWith('spotify:') && !selectedPlaybackDevice.hasSpotify) ||
+    (currentTrack.uri?.startsWith('spotify:') && (!selectedPlaybackDevice.hasSpotify || !window.Spotify)) ||
     (currentTrack.uri?.startsWith('appleMusic:') && !selectedPlaybackDevice.hasAppleMusic)
   );
 
@@ -150,6 +150,7 @@ const PlayerBar = ({
     trackUri: currentTrack?.uri,
     deviceHasSpotify: selectedPlaybackDevice?.hasSpotify,
     deviceHasAppleMusic: selectedPlaybackDevice?.hasAppleMusic,
+    spotifySdkLoaded: !!window.Spotify,
     isDisabled
   });
 
@@ -157,6 +158,7 @@ const PlayerBar = ({
     if (!currentTrack) return "No track in queue";
     if (!selectedPlaybackDevice) return "No playback device selected";
     if (currentTrack.uri?.startsWith('spotify:') && !selectedPlaybackDevice.hasSpotify) return "Selected device cannot play Spotify tracks";
+    if (currentTrack.uri?.startsWith('spotify:') && !window.Spotify) return "Spotify player is not ready";
     if (currentTrack.uri?.startsWith('appleMusic:') && !selectedPlaybackDevice.hasAppleMusic) return "Selected device cannot play Apple Music tracks";
     return "";
   };
