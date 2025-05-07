@@ -396,118 +396,47 @@ class QueueService {
     return true;
   }
 
-  async syncQueueWithSpotify(queue) {
-    if (!queue || queue.length === 0) return;
-
-    // Prevent multiple syncs from happening at once
-    if (this.isSyncing) {
-      console.log('Spotify: Queue sync already in progress, skipping');
-      return;
-    }
-
-    // Check if we're syncing too frequently
-    const now = Date.now();
-    if (now - this.lastSyncTime < this.SYNC_COOLDOWN) {
-      console.log('Spotify: Queue sync too soon, skipping');
-      return;
-    }
-
-    const accessToken = localStorage.getItem('spotify_access_token');
-    if (!accessToken) {
-      console.log('Spotify: No access token available for queue sync');
-      return;
-    }
-
-    this.isSyncing = true;
-    this.lastSyncTime = now;
-
+  async syncQueueWithSpotify(sessionQueue) {
     try {
-      // Get current Spotify queue
-      const { queue: spotifyQueue } = await getQueue(accessToken);
+      // Only sync Spotify tracks
+      const spotifyTracks = sessionQueue.filter(track => track.source === 'spotify');
       
-      // If this is the first track in our queue, handle it specially
-      if (queue.length === 1) {
+      if (spotifyTracks.length === 0) {
+        console.log('No Spotify tracks to sync');
+        return;
+      }
+
+      // Get current Spotify queue
+      const currentSpotifyQueue = await this.getSpotifyQueue();
+      
+      // Handle first track in queue
+      if (spotifyTracks.length > 0) {
+        const firstTrack = spotifyTracks[0];
         console.log('Spotify: Handling first track in queue', {
-          trackUri: queue[0].uri,
-          trackName: queue[0].name,
-          currentSpotifyQueue: spotifyQueue.map(t => ({ uri: t.uri, name: t.name }))
+          trackUri: firstTrack.uri,
+          trackName: firstTrack.name,
+          currentSpotifyQueue
         });
 
-        try {
-          // Only check if it's the current track
-          const isTrackCurrent = spotifyQueue[0]?.uri === queue[0].uri;
-
-          if (!isTrackCurrent) {
-            // First add our track to the queue
-            console.log('Spotify: Adding new track to queue first');
-            await spotifyAddToQueue(queue[0].uri, accessToken);
-            console.log('Spotify: Track added to queue:', queue[0].name);
-            
-            // Wait a moment for the queue update to process
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            // Then skip the current track to start playing our queued track
-            console.log('Spotify: Skipping current track to start playing queued track');
-            await skipToNext(accessToken);
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // Verify the sync once
-            const { queue: newSpotifyQueue } = await getQueue(accessToken);
-            const syncSuccess = await this.verifyQueueSync(queue, newSpotifyQueue);
-            
-            if (!syncSuccess) {
-              console.log('Spotify: Queue verification failed, but not retrying to prevent duplicates');
-            }
-          } else {
-            console.log('Spotify: Track is current track, skipping add');
-          }
-          return;
-        } catch (error) {
-          console.error('Spotify: Error handling first track:', error);
-          if (error.message?.includes('404')) {
-            localStorage.removeItem('spotify_access_token');
-            window.location.reload();
-            return;
-          }
+        // Only add to Spotify queue if it's a Spotify track
+        if (firstTrack.source === 'spotify') {
+          console.log('Spotify: Adding new track to queue first');
+          await spotifyAddToQueue(firstTrack.uri, localStorage.getItem('spotify_access_token'));
         }
       }
 
-      // For subsequent tracks, just add them to the queue
-      // Create a map of URIs for faster lookup
-      const spotifyUriMap = new Map(spotifyQueue.map(track => [track.uri, track]));
-      const sessionUriMap = new Map(queue.map(track => [track.uri, track]));
-
-      // Add any missing tracks to Spotify's queue
-      for (const track of queue) {
-        if (track.source === 'spotify' && !spotifyUriMap.has(track.uri)) {
-          try {
-            await spotifyAddToQueue(track.uri, accessToken);
-            console.log('Spotify: Added track to queue:', track.name);
-            await new Promise(resolve => setTimeout(resolve, 500));
-          } catch (error) {
-            console.error('Spotify: Error adding track to queue:', error);
-            if (error.message?.includes('404')) {
-              localStorage.removeItem('spotify_access_token');
-              window.location.reload();
-              return;
-            }
-          }
+      // Sync remaining tracks
+      for (let i = 1; i < spotifyTracks.length; i++) {
+        const track = spotifyTracks[i];
+        if (track.source === 'spotify') {
+          await spotifyAddToQueue(track.uri, localStorage.getItem('spotify_access_token'));
         }
       }
-
-      // Verify the sync after all changes
-      const { queue: newSpotifyQueue } = await getQueue(accessToken);
-      await this.verifyQueueSync(queue, newSpotifyQueue);
 
       console.log('Spotify: Queue sync complete');
     } catch (error) {
       console.error('Spotify: Error syncing queue:', error);
-      if (error.message?.includes('404')) {
-        localStorage.removeItem('spotify_access_token');
-        window.location.reload();
-      }
-    } finally {
-      this.isSyncing = false;
+      throw error;
     }
   }
 }

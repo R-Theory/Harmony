@@ -453,21 +453,24 @@ export default function Session() {
       // Get the next track
       const nextTrack = queue[1];
       
-      // Double check with Spotify if the current track is actually ending
-      if (spotifyPlayerRef.current) {
-        const state = await spotifyPlayerRef.current.getCurrentState();
-        if (state && state.track_window.current_track) {
-          const timeUntilEnd = state.duration - state.position;
-          if (timeUntilEnd > TRACK_END_THRESHOLD) {
-            debug.log('Track not actually ending, skipping manually');
-          }
-        }
+      // If the next track is from Apple Music, pause Spotify first
+      if (nextTrack.source === 'appleMusic' && spotifyPlayerRef.current) {
+        debug.log('Next track is Apple Music, pausing Spotify');
+        await spotifyPlayerRef.current.pause();
       }
       
-      // Update the queue in the service
+      // Remove the current track from the queue
       await queueService.removeFromQueue(queue[0]);
       
-      // The queue update callback will handle syncing with Spotify
+      // If the next track is Apple Music, start playing it
+      if (nextTrack.source === 'appleMusic' && window.MusicKit) {
+        debug.log('Starting Apple Music playback');
+        const music = window.MusicKit.getInstance();
+        await music.setQueue({ song: nextTrack.appleMusicId });
+        await music.play();
+      }
+      
+      // The queue update callback will handle syncing with Spotify if needed
     } catch (error) {
       debug.logError('[DEBUG][Session] Error skipping to next track:', error);
       showQueueNotification('Failed to skip to next track', 'error');
