@@ -103,7 +103,6 @@ export default function Session() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [lastQueueUpdate, setLastQueueUpdate] = useState(0);
   const [queueNotification, setQueueNotification] = useState({ open: false, message: '', severity: 'success' });
   const [devices, setDevices] = useState([]);
   const [isDeviceDialogOpen, setIsDeviceDialogOpen] = useState(false);
@@ -121,7 +120,7 @@ export default function Session() {
   const spotifyPlayerRef = useRef(null);
 
   // Constants
-  const QUEUE_UPDATE_INTERVAL = 1000; // 1 second between queue updates
+  const QUEUE_UPDATE_INTERVAL = 3000; // 3 seconds between queue updates
 
   // Generate or get a userId for this device
   const [userId] = useState(() => {
@@ -224,7 +223,6 @@ export default function Session() {
       setProgress(0);
       setDuration(0);
       setQueue([]);
-      setLastQueueUpdate(0);
       setSelectedPlaybackDevice(null);
       console.log('[Session] Cleanup: isHost removed from localStorage and state reset.');
     };
@@ -330,16 +328,21 @@ export default function Session() {
             await spotifyPlayerRef.current.pause();
             // Wait for pause to take effect
             await new Promise(resolve => setTimeout(resolve, 500));
-            // Load the new track
-            await spotifyPlayerRef.current.load(mappedTrack.uri);
-            // Wait for load to complete
-            await new Promise(resolve => setTimeout(resolve, 500));
-            // Ensure it's paused
-            await spotifyPlayerRef.current.pause();
             
-            // Update our state
-            setCurrentTrack(mappedTrack);
-            setIsPlaying(false);
+            // Only load if we have a valid player
+            if (spotifyPlayerRef.current && typeof spotifyPlayerRef.current.load === 'function') {
+              await spotifyPlayerRef.current.load(mappedTrack.uri);
+              // Wait for load to complete
+              await new Promise(resolve => setTimeout(resolve, 500));
+              // Ensure it's paused
+              await spotifyPlayerRef.current.pause();
+              
+              // Update our state
+              setCurrentTrack(mappedTrack);
+              setIsPlaying(false);
+            } else {
+              debug.logError('[DEBUG][Session] Invalid Spotify player instance');
+            }
           } catch (error) {
             debug.logError('[DEBUG][Session] Error loading track:', error);
             // If we get a 404, try to refresh the token
@@ -371,6 +374,9 @@ export default function Session() {
       debug.logError('[DEBUG][Session] Error syncing queue with Spotify:', error);
     }
   };
+
+  // Add debouncing for queue updates
+  const [lastQueueUpdate, setLastQueueUpdate] = useState(0);
 
   // Update the queue callback useEffect
   useEffect(() => {
@@ -711,10 +717,24 @@ export default function Session() {
               uri: state.track_window.current_track.uri,
               duration: state.track_window.current_track.duration_ms
             };
-            setCurrentTrack(currentTrack);
-            setProgress(state.position);
-            setDuration(state.duration);
-            setIsPlaying(!state.paused);
+            
+            // Only update state if there are meaningful changes
+            if (JSON.stringify(currentTrack) !== JSON.stringify(currentTrack)) {
+              setCurrentTrack(currentTrack);
+            }
+            
+            // Update progress and duration only if they've changed significantly (> 100ms)
+            if (Math.abs(state.position - progress) > 100) {
+              setProgress(state.position);
+            }
+            if (Math.abs(state.duration - duration) > 100) {
+              setDuration(state.duration);
+            }
+            
+            // Only update isPlaying if it's different
+            if (state.paused !== !isPlaying) {
+              setIsPlaying(!state.paused);
+            }
           } else {
             // If no track, ensure we're not playing
             setCurrentTrack(null);
