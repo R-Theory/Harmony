@@ -317,13 +317,11 @@ class QueueService {
         const accessToken = localStorage.getItem('spotify_access_token');
         if (accessToken) {
           try {
-            // Since Spotify doesn't support direct queue removal,
-            // we'll skip to the next track if this is the current track
-            const state = await spotifyPlayerRef?.current?.getCurrentState();
-            if (state?.track_window?.current_track?.uri === track.uri) {
-              await skipToNext(accessToken);
-              console.log('Spotify: Skipped current track');
-            }
+            // Skip to next track to remove the current one
+            await skipToNext(accessToken);
+            console.log('Spotify: Skipped current track');
+            // Wait a moment for the skip to take effect
+            await new Promise(resolve => setTimeout(resolve, 500));
           } catch (spotifyError) {
             console.error('Spotify: Error removing from queue:', spotifyError);
             // Continue with app-managed queue even if Spotify queue fails
