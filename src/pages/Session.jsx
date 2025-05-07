@@ -116,6 +116,7 @@ export default function Session() {
   const [showDeviceMenu, setShowDeviceMenu] = useState(false);
   const [isQueueSyncing, setIsQueueSyncing] = useState(false);
   const [isInitialQueueSetup, setIsInitialQueueSetup] = useState(true);
+  const [hasInitialTrackLoaded, setHasInitialTrackLoaded] = useState(false);
 
   // Refs
   const audioRef = useRef(null);
@@ -313,7 +314,8 @@ export default function Session() {
       setIsQueueSyncing(true);
       debug.log('[DEBUG][Session] Syncing queue with Spotify', { 
         queueLength: newQueue.length,
-        isInitialQueueSetup 
+        isInitialQueueSetup,
+        hasInitialTrackLoaded
       });
       
       // Get current Spotify state
@@ -330,7 +332,8 @@ export default function Session() {
           debug.log('[DEBUG][Session] Loading new track', { 
             currentUri, 
             newUri: mappedTrack.uri,
-            isInitialQueueSetup
+            isInitialQueueSetup,
+            hasInitialTrackLoaded
           });
           
           try {
@@ -342,13 +345,14 @@ export default function Session() {
             // Only load if we have a valid player
             if (spotifyPlayerRef.current && typeof spotifyPlayerRef.current.load === 'function') {
               // For initial queue setup, we want to load and play
-              if (isInitialQueueSetup) {
+              if (isInitialQueueSetup && !hasInitialTrackLoaded) {
                 await spotifyPlayerRef.current.load(mappedTrack.uri);
                 // Wait for load to complete
                 await new Promise(resolve => setTimeout(resolve, 500));
                 // Start playing
                 await spotifyPlayerRef.current.resume();
                 setIsPlaying(true);
+                setHasInitialTrackLoaded(true);
               } else {
                 // For subsequent updates, just load and pause
                 await spotifyPlayerRef.current.load(mappedTrack.uri);
@@ -416,7 +420,8 @@ export default function Session() {
             timeSinceLastUpdate: now - lastQueueUpdate,
             requiredInterval: QUEUE_UPDATE_INTERVAL,
             isQueueSyncing,
-            isInitialQueueSetup
+            isInitialQueueSetup,
+            hasInitialTrackLoaded
           });
           return;
         }
@@ -432,7 +437,7 @@ export default function Session() {
         setError({ message: errorMessage });
       }
     );
-  }, [queueService.socket, lastQueueUpdate, isQueueSyncing, isInitialQueueSetup]);
+  }, [queueService.socket, lastQueueUpdate, isQueueSyncing, isInitialQueueSetup, hasInitialTrackLoaded]);
 
   // Add this state for progress update debouncing
   const [lastProgressUpdate, setLastProgressUpdate] = useState(0);
