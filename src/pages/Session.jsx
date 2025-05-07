@@ -344,9 +344,12 @@ export default function Session() {
       const currentUri = state?.track_window?.current_track?.uri;
       console.log('[DEBUG][Session] Current Spotify state:', { currentUri, state });
 
-      // If this is the first track in our queue, handle it specially
-      if (queue.length === 1) {
-        const firstTrack = queue[0];
+      // Only sync Spotify tracks
+      const spotifyTracks = queue.filter(track => track.source === 'spotify');
+      
+      // If this is the first Spotify track in our queue, handle it specially
+      if (spotifyTracks.length === 1) {
+        const firstTrack = spotifyTracks[0];
         const shouldLoad = currentUri !== firstTrack.uri;
         console.log('[DEBUG][Session] Processing first track:', {
           firstTrackUri: firstTrack.uri,
@@ -368,9 +371,10 @@ export default function Session() {
           const wasPlaying = !state?.paused;
 
           // Play the new track
-          await spotifyPlayerRef.current.play({
-            uris: [firstTrack.uri]
-          });
+          await spotifyPlayerRef.current.load(firstTrack.uri);
+          if (wasPlaying) {
+            await spotifyPlayerRef.current.resume();
+          }
 
           // Update state
           setHasInitialTrackLoaded(true);
@@ -488,7 +492,11 @@ export default function Session() {
       });
 
       // Check if the track is already in the queue
-      const isAlreadyInQueue = queue.some(q => q.uri === track.uri);
+      const isAlreadyInQueue = queue.some(q => 
+        (q.uri === track.uri) || 
+        (q.appleMusicId === track.appleMusicId)
+      );
+      
       if (isAlreadyInQueue) {
         debug.log('[DEBUG][Session] Track already in queue:', {
           trackUri: track.uri,
@@ -502,8 +510,8 @@ export default function Session() {
       const formattedTrack = {
         ...track,
         source: track.source || 'spotify',
-        uri: track.uri || track.appleMusicId,
-        appleMusicId: track.appleMusicId || track.uri,
+        uri: track.source === 'appleMusic' ? track.appleMusicId : track.uri,
+        appleMusicId: track.source === 'appleMusic' ? track.appleMusicId : null,
         name: track.name || track.title,
         artists: track.artists || [{ name: track.artist }],
         album: track.album || { images: [{ url: track.albumArt }] },

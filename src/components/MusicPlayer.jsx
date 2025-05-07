@@ -343,11 +343,18 @@ const MusicPlayer = ({
         try {
           if (track.appleMusicId) {
             debug.log('Setting Apple Music queue', { track });
+            
+            // Set the queue with the track
             await music.setQueue({ song: track.appleMusicId });
+            
+            // Set volume
+            music.volume = volume / 100;
             
             if (isPlaying) {
               debug.log('Starting Apple Music playback');
               await music.play();
+            } else {
+              await music.pause();
             }
           }
         } catch (error) {
@@ -365,11 +372,21 @@ const MusicPlayer = ({
         }
       };
 
+      // Add playback state observer
+      const handlePlaybackStateDidChange = (event) => {
+        const newIsPlaying = event.state === 'playing';
+        if (newIsPlaying !== isPlaying) {
+          setIsPlaying(newIsPlaying);
+        }
+      };
+
       music.addEventListener('playbackTimeDidChange', handlePlaybackTimeDidChange);
+      music.addEventListener('playbackStateDidChange', handlePlaybackStateDidChange);
 
       // Cleanup
       return () => {
         music.removeEventListener('playbackTimeDidChange', handlePlaybackTimeDidChange);
+        music.removeEventListener('playbackStateDidChange', handlePlaybackStateDidChange);
       };
     }
   }, [track, isPlaying, volume, appleMusicUserToken, onProgressUpdate]);
