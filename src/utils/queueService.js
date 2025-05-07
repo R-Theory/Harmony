@@ -332,18 +332,20 @@ class QueueService {
       // If this is the first track in our queue, clear Spotify's queue first
       if (queue.length === 1 && spotifyQueue.length > 0) {
         console.log('Spotify: Clearing queue before adding first track');
-        // Skip through all tracks in the queue to clear it
-        for (let i = 0; i < spotifyQueue.length; i++) {
-          try {
-            await skipToNext(accessToken);
-            await new Promise(resolve => setTimeout(resolve, 100)); // Rate limiting
-          } catch (error) {
-            console.error('Spotify: Error clearing queue:', error);
-            if (error.message?.includes('404')) {
-              localStorage.removeItem('spotify_access_token');
-              window.location.reload();
-              return;
-            }
+        // Instead of skipping through all tracks, just add our track
+        // Spotify will automatically clear the queue when we start playing
+        try {
+          await spotifyAddToQueue(queue[0].uri, accessToken);
+          console.log('Spotify: Added first track to queue:', queue[0].name);
+          // Add a longer delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+          return; // Exit early since we've handled the first track
+        } catch (error) {
+          console.error('Spotify: Error adding first track:', error);
+          if (error.message?.includes('404')) {
+            localStorage.removeItem('spotify_access_token');
+            window.location.reload();
+            return;
           }
         }
       }
@@ -358,8 +360,8 @@ class QueueService {
           try {
             await spotifyAddToQueue(track.uri, accessToken);
             console.log('Spotify: Added track to queue:', track.name);
-            // Add a small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Add a longer delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 500));
           } catch (error) {
             console.error('Spotify: Error adding track to queue:', error);
             if (error.message?.includes('404')) {
@@ -371,25 +373,9 @@ class QueueService {
         }
       }
 
-      // Then, check if we need to remove any tracks from Spotify's queue
-      // Only remove tracks that are not in our queue and are not currently playing
-      for (const spotifyTrack of spotifyQueue) {
-        if (!sessionUriMap.has(spotifyTrack.uri) && !spotifyTrack.is_playing) {
-          try {
-            await skipToNext(accessToken);
-            console.log('Spotify: Removed track from queue:', spotifyTrack.name);
-            // Add a small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } catch (error) {
-            console.error('Spotify: Error removing track from queue:', error);
-            if (error.message?.includes('404')) {
-              localStorage.removeItem('spotify_access_token');
-              window.location.reload();
-              return;
-            }
-          }
-        }
-      }
+      // Instead of removing tracks one by one, we'll just let Spotify handle the queue
+      // This is safer and avoids rate limiting issues
+      console.log('Spotify: Queue sync complete');
     } catch (error) {
       console.error('Spotify: Error syncing queue:', error);
       if (error.message?.includes('404')) {
