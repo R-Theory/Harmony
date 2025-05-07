@@ -11,6 +11,7 @@ class QueueService {
     this.isSyncing = false;
     this.lastSyncTime = 0;
     this.SYNC_COOLDOWN = 2000; // 2 seconds between syncs
+    this.lastQueueState = null; // Track the last known queue state
   }
 
   connect(sessionId) {
@@ -219,11 +220,44 @@ class QueueService {
   setCallbacks(onQueueUpdate, onError) {
     this.onQueueUpdate = async (queue) => {
       if (onQueueUpdate) {
-        await this.syncQueueWithSpotify(queue);
+        // Only sync if there are meaningful changes to the queue
+        if (this.shouldSyncQueue(queue)) {
+          await this.syncQueueWithSpotify(queue);
+        }
         onQueueUpdate(queue);
       }
     };
     this.onError = onError;
+  }
+
+  shouldSyncQueue(newQueue) {
+    if (!this.lastQueueState) {
+      this.lastQueueState = newQueue;
+      return true; // First sync
+    }
+
+    // Check if a track was added
+    const newTracks = newQueue.filter(track => 
+      !this.lastQueueState.some(oldTrack => oldTrack.uri === track.uri)
+    );
+    if (newTracks.length > 0) {
+      console.log('Spotify: New tracks added to queue, syncing');
+      this.lastQueueState = newQueue;
+      return true;
+    }
+
+    // Check if a track was removed
+    const removedTracks = this.lastQueueState.filter(track =>
+      !newQueue.some(newTrack => newTrack.uri === track.uri)
+    );
+    if (removedTracks.length > 0) {
+      console.log('Spotify: Tracks removed from queue, syncing');
+      this.lastQueueState = newQueue;
+      return true;
+    }
+
+    // No meaningful changes
+    return false;
   }
 
   async addToQueue(track) {
@@ -319,6 +353,51 @@ class QueueService {
     });
   }
 
+  async verifyQueueSync(sessionQueue, spotifyQueue) {
+    if (!sessionQueue || !spotifyQueue) {
+      console.log('Spotify: Cannot verify queue sync - missing queue data');
+      return false;
+    }
+
+    // Filter session queue to only include Spotify tracks
+    const sessionSpotifyTracks = sessionQueue.filter(track => track.source === 'spotify');
+    
+    // Create arrays of URIs for comparison
+    const sessionUris = sessionSpotifyTracks.map(track => track.uri);
+    const spotifyUris = spotifyQueue.map(track => track.uri);
+
+    // Check if all Spotify tracks from session are in Spotify queue
+    const missingTracks = sessionUris.filter(uri => !spotifyUris.includes(uri));
+    if (missingTracks.length > 0) {
+      console.error('Spotify: Queue verification failed - missing tracks:', {
+        missingTracks,
+        sessionQueueLength: sessionQueue.length,
+        spotifyQueueLength: spotifyQueue.length
+      });
+      return false;
+    }
+
+    // Check if order matches (only for tracks that are in both queues)
+    const orderedSpotifyUris = spotifyUris.filter(uri => sessionUris.includes(uri));
+    const orderedSessionUris = sessionUris.filter(uri => spotifyUris.includes(uri));
+
+    const orderMatches = orderedSpotifyUris.every((uri, index) => uri === orderedSessionUris[index]);
+    if (!orderMatches) {
+      console.error('Spotify: Queue verification failed - order mismatch:', {
+        sessionOrder: orderedSessionUris,
+        spotifyOrder: orderedSpotifyUris
+      });
+      return false;
+    }
+
+    console.log('Spotify: Queue verification passed:', {
+      sessionQueueLength: sessionQueue.length,
+      spotifyQueueLength: spotifyQueue.length,
+      spotifyTracksInSession: sessionSpotifyTracks.length
+    });
+    return true;
+  }
+
   async syncQueueWithSpotify(queue) {
     if (!queue || queue.length === 0) return;
 
@@ -365,6 +444,10 @@ class QueueService {
           await spotifyAddToQueue(queue[0].uri, accessToken);
           console.log('Spotify: Added first track to queue:', queue[0].name);
           await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Verify the sync
+          const { queue: newSpotifyQueue } = await getQueue(accessToken);
+          await this.verifyQueueSync(queue, newSpotifyQueue);
           return;
         } catch (error) {
           console.error('Spotify: Error handling first track:', error);
@@ -398,6 +481,10 @@ class QueueService {
           }
         }
       }
+
+      // Verify the sync after all changes
+      const { queue: newSpotifyQueue } = await getQueue(accessToken);
+      await this.verifyQueueSync(queue, newSpotifyQueue);
 
       console.log('Spotify: Queue sync complete');
     } catch (error) {
