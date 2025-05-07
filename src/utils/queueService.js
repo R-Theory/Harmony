@@ -440,16 +440,18 @@ class QueueService {
           const isTrackCurrent = spotifyQueue[0]?.uri === queue[0].uri;
 
           if (!isTrackCurrent) {
-            // Add to queue if it's not the current track
+            // First add our track to the queue
+            console.log('Spotify: Adding new track to queue first');
             await spotifyAddToQueue(queue[0].uri, accessToken);
-            console.log('Spotify: Added first track to queue:', queue[0].name);
+            console.log('Spotify: Track added to queue:', queue[0].name);
             
-            // Wait a moment for Spotify to process the change
+            // Wait a moment for the queue update to process
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // Skip the current track to start playing our queued track
+            // Then skip the current track to start playing our queued track
+            console.log('Spotify: Skipping current track to start playing queued track');
             await skipToNext(accessToken);
-            console.log('Spotify: Skipped current track to start playing queued track');
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             // Verify the sync once
             const { queue: newSpotifyQueue } = await getQueue(accessToken);
