@@ -117,6 +117,7 @@ export default function Session() {
   const [isQueueSyncing, setIsQueueSyncing] = useState(false);
   const [isInitialQueueSetup, setIsInitialQueueSetup] = useState(true);
   const [hasInitialTrackLoaded, setHasInitialTrackLoaded] = useState(false);
+  const [isQueueProcessing, setIsQueueProcessing] = useState(false);
 
   // Refs
   const audioRef = useRef(null);
@@ -306,13 +307,14 @@ export default function Session() {
     };
   }, [peerConnection]);
   
-  // Update the syncQueueWithSpotify function with more detailed logging
+  // Update the syncQueueWithSpotify function
   const syncQueueWithSpotify = async (newQueue) => {
-    if (!spotifyPlayerRef.current || !newQueue || isQueueSyncing) {
+    if (!spotifyPlayerRef.current || !newQueue || isQueueSyncing || isQueueProcessing) {
       debug.log('[DEBUG][Session] Skipping queue sync:', {
         hasPlayer: !!spotifyPlayerRef.current,
         hasQueue: !!newQueue,
         isQueueSyncing,
+        isQueueProcessing,
         queueLength: newQueue?.length
       });
       return;
@@ -320,6 +322,7 @@ export default function Session() {
     
     try {
       setIsQueueSyncing(true);
+      setIsQueueProcessing(true);
       debug.log('[DEBUG][Session] Starting queue sync', { 
         queueLength: newQueue.length,
         isInitialQueueSetup,
@@ -437,10 +440,11 @@ export default function Session() {
       debug.logError('[DEBUG][Session] Error syncing queue with Spotify:', error);
     } finally {
       setIsQueueSyncing(false);
+      setIsQueueProcessing(false);
     }
   };
 
-  // Update the queue callback useEffect with more logging
+  // Update the queue callback useEffect
   const [lastQueueUpdate, setLastQueueUpdate] = useState(0);
 
   useEffect(() => {
@@ -458,17 +462,19 @@ export default function Session() {
           timeSinceLastUpdate: now - lastQueueUpdate,
           requiredInterval: QUEUE_UPDATE_INTERVAL,
           isQueueSyncing,
+          isQueueProcessing,
           isInitialQueueSetup,
           hasInitialTrackLoaded,
           queueLength: updatedQueue?.length,
           queueContents: updatedQueue?.map(t => ({ uri: t.uri, name: t.name }))
         });
 
-        if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL || isQueueSyncing) {
+        if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL || isQueueSyncing || isQueueProcessing) {
           debug.log('[DEBUG][Session] Queue update rate limited or sync in progress', {
             timeSinceLastUpdate: now - lastQueueUpdate,
             requiredInterval: QUEUE_UPDATE_INTERVAL,
             isQueueSyncing,
+            isQueueProcessing,
             isInitialQueueSetup,
             hasInitialTrackLoaded
           });
@@ -486,7 +492,7 @@ export default function Session() {
         setError({ message: errorMessage });
       }
     );
-  }, [queueService.socket, lastQueueUpdate, isQueueSyncing, isInitialQueueSetup, hasInitialTrackLoaded]);
+  }, [queueService.socket, lastQueueUpdate, isQueueSyncing, isQueueProcessing, isInitialQueueSetup, hasInitialTrackLoaded]);
 
   // Add this state for progress update debouncing
   const [lastProgressUpdate, setLastProgressUpdate] = useState(0);
@@ -527,13 +533,19 @@ export default function Session() {
 
   // Update handleAddToQueue with more logging
   const handleAddToQueue = async (track) => {
+    if (isQueueProcessing) {
+      debug.log('[DEBUG][Session] Queue is currently processing, skipping add operation');
+      return;
+    }
+
     try {
       debug.log('[DEBUG][Session] Adding track to queue:', {
         trackUri: track.uri,
         trackName: track.name,
         currentQueueLength: queue.length,
         isInitialQueueSetup,
-        hasInitialTrackLoaded
+        hasInitialTrackLoaded,
+        isQueueProcessing
       });
 
       // Check if the track is already in the queue
