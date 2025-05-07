@@ -329,19 +329,26 @@ class QueueService {
       // Get current Spotify queue
       const { queue: spotifyQueue } = await getQueue(accessToken);
       
-      // If this is the first track in our queue, clear Spotify's queue first
-      if (queue.length === 1 && spotifyQueue.length > 0) {
-        console.log('Spotify: Clearing queue before adding first track');
-        // Instead of skipping through all tracks, just add our track
-        // Spotify will automatically clear the queue when we start playing
+      // If this is the first track in our queue, handle it specially
+      if (queue.length === 1) {
+        console.log('Spotify: Handling first track in queue');
         try {
+          // First, clear the current queue by skipping through all tracks
+          if (spotifyQueue.length > 0) {
+            console.log('Spotify: Clearing existing queue');
+            for (let i = 0; i < spotifyQueue.length; i++) {
+              await skipToNext(accessToken);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+
+          // Then add our track
           await spotifyAddToQueue(queue[0].uri, accessToken);
           console.log('Spotify: Added first track to queue:', queue[0].name);
-          // Add a longer delay to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 500));
-          return; // Exit early since we've handled the first track
+          return;
         } catch (error) {
-          console.error('Spotify: Error adding first track:', error);
+          console.error('Spotify: Error handling first track:', error);
           if (error.message?.includes('404')) {
             localStorage.removeItem('spotify_access_token');
             window.location.reload();
@@ -350,17 +357,17 @@ class QueueService {
         }
       }
 
+      // For subsequent tracks, just add them to the queue
       // Create a map of URIs for faster lookup
       const spotifyUriMap = new Map(spotifyQueue.map(track => [track.uri, track]));
       const sessionUriMap = new Map(queue.map(track => [track.uri, track]));
 
-      // First, check if we need to add any tracks from our queue to Spotify's queue
+      // Add any missing tracks to Spotify's queue
       for (const track of queue) {
         if (track.source === 'spotify' && !spotifyUriMap.has(track.uri)) {
           try {
             await spotifyAddToQueue(track.uri, accessToken);
             console.log('Spotify: Added track to queue:', track.name);
-            // Add a longer delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 500));
           } catch (error) {
             console.error('Spotify: Error adding track to queue:', error);
@@ -373,8 +380,6 @@ class QueueService {
         }
       }
 
-      // Instead of removing tracks one by one, we'll just let Spotify handle the queue
-      // This is safer and avoids rate limiting issues
       console.log('Spotify: Queue sync complete');
     } catch (error) {
       console.error('Spotify: Error syncing queue:', error);
