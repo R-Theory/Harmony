@@ -1303,6 +1303,9 @@ export default function Session() {
         appleMusicUserToken={appleMusicUserToken}
         hasSpotify={hasSpotify}
         hasAppleMusic={hasAppleMusic}
+        progress={progress}
+        duration={duration}
+        onSeek={handleSeek}
       />
       <Search
         onAddTrack={handleAddToQueue}

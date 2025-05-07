@@ -19,7 +19,10 @@ export default function PlayerContainer({
   spotifyPlayerRef,
   appleMusicUserToken,
   hasSpotify,
-  hasAppleMusic
+  hasAppleMusic,
+  progress,
+  duration,
+  onSeek
 }) {
   // Memoize the player state to prevent unnecessary re-renders
   const playerState = useMemo(() => {
@@ -111,8 +114,9 @@ export default function PlayerContainer({
         volume={volume}
         onVolumeChange={handleVolumeChange}
         selectedPlaybackDevice={selectedPlaybackDevice}
-        progress={0}
-        duration={currentTrack?.duration_ms || 0}
+        progress={progress}
+        duration={duration}
+        onSeek={onSeek}
       />
       <MusicPlayer
         currentTrack={currentTrack}
