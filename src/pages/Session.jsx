@@ -442,40 +442,83 @@ export default function Session() {
 
   // Update the handleSkipNext function to include safety checks
   const handleSkipNext = async () => {
-    if (!queue || queue.length <= 1) return;
-    
-    debug.log('Skipping to next track', {
-      currentTrack,
-      nextTrack: queue[1]
-    });
-    
     try {
-      // Get the next track
-      const nextTrack = queue[1];
-      
-      // If the next track is from Apple Music, pause Spotify first
-      if (nextTrack.source === 'appleMusic' && spotifyPlayerRef.current) {
-        debug.log('Next track is Apple Music, pausing Spotify');
-        await spotifyPlayerRef.current.pause();
+      if (!queue.length) {
+        console.log('No tracks in queue to skip to');
+        return;
       }
-      
-      // Remove the current track from the queue
-      await queueService.removeFromQueue(queue[0]);
-      
-      // If the next track is Apple Music, start playing it
-      if (nextTrack.source === 'appleMusic' && window.MusicKit) {
-        debug.log('Starting Apple Music playback');
-        const music = window.MusicKit.getInstance();
-        await music.setQueue({ song: nextTrack.appleMusicId });
-        await music.play();
+
+      const nextTrack = queue[0];
+      console.log('Skipping to next track:', nextTrack);
+
+      // If next track is from Apple Music
+      if (nextTrack.source === 'appleMusic') {
+        // Pause Spotify if it's playing
+        if (spotifyPlayerRef.current) {
+          await spotifyPlayerRef.current.pause();
+        }
+
+        // Remove current track from queue
+        const newQueue = queue.slice(1);
+        setQueue(newQueue);
+
+        // Start playing Apple Music track
+        if (window.MusicKit && nextTrack.appleMusicId) {
+          const music = window.MusicKit.getInstance();
+          
+          // Ensure we're authorized
+          await music.authorize();
+          
+          // Set up the queue with the track
+          await music.setQueue({
+            items: [{
+              id: nextTrack.appleMusicId,
+              type: 'songs'
+            }]
+          });
+
+          // Set volume to match current volume
+          music.player.volume = volume / 100;
+
+          // Start playback
+          await music.player.play();
+          
+          // Update playback state
+          setIsPlaying(true);
+          setCurrentTrack(nextTrack);
+        }
+      } else {
+        // Handle Spotify track
+        if (spotifyPlayerRef.current) {
+          await spotifyPlayerRef.current.skipToNext();
+        }
       }
-      
-      // The queue update callback will handle syncing with Spotify if needed
     } catch (error) {
-      debug.logError('[DEBUG][Session] Error skipping to next track:', error);
+      console.error('Error skipping to next track:', error);
       showQueueNotification('Failed to skip to next track', 'error');
     }
   };
+
+  // Add Apple Music playback state listener
+  useEffect(() => {
+    if (window.MusicKit) {
+      const music = window.MusicKit.getInstance();
+      
+      const handlePlaybackStateChange = (event) => {
+        console.log('Apple Music playback state changed:', event);
+        setIsPlaying(!event.player.paused);
+      };
+
+      music.addEventListener('playbackStateDidChange', handlePlaybackStateChange);
+      music.addEventListener('queueItemsDidChange', (event) => {
+        console.log('Apple Music queue changed:', event);
+      });
+
+      return () => {
+        music.removeEventListener('playbackStateDidChange', handlePlaybackStateChange);
+      };
+    }
+  }, []);
 
   // Update handleAddToQueue with more logging
   const handleAddToQueue = async (track) => {

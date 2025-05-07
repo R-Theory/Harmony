@@ -406,8 +406,14 @@ class QueueService {
         return;
       }
 
+      const accessToken = localStorage.getItem('spotify_access_token');
+      if (!accessToken) {
+        console.log('No Spotify access token available');
+        return;
+      }
+
       // Get current Spotify queue
-      const currentSpotifyQueue = await this.getSpotifyQueue();
+      const { queue: currentSpotifyQueue } = await getQueue(accessToken);
       
       // Handle first track in queue
       if (spotifyTracks.length > 0) {
@@ -421,7 +427,7 @@ class QueueService {
         // Only add to Spotify queue if it's a Spotify track
         if (firstTrack.source === 'spotify') {
           console.log('Spotify: Adding new track to queue first');
-          await spotifyAddToQueue(firstTrack.uri, localStorage.getItem('spotify_access_token'));
+          await spotifyAddToQueue(firstTrack.uri, accessToken);
         }
       }
 
@@ -429,7 +435,7 @@ class QueueService {
       for (let i = 1; i < spotifyTracks.length; i++) {
         const track = spotifyTracks[i];
         if (track.source === 'spotify') {
-          await spotifyAddToQueue(track.uri, localStorage.getItem('spotify_access_token'));
+          await spotifyAddToQueue(track.uri, accessToken);
         }
       }
 
