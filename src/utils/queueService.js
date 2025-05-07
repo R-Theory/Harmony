@@ -12,6 +12,7 @@ class QueueService {
     this.lastSyncTime = 0;
     this.SYNC_COOLDOWN = 2000; // 2 seconds between syncs
     this.lastQueueState = null; // Track the last known queue state
+    this.debug = new DebugLogger('QueueService');
   }
 
   connect(sessionId) {
@@ -260,6 +261,177 @@ class QueueService {
     return false;
   }
 
+  async verifyQueueSync(sessionQueue, spotifyQueue, appleMusicQueue) {
+    if (!sessionQueue || !spotifyQueue || !appleMusicQueue) {
+      this.debug.log('Cannot verify queue sync - missing queue data', {
+        hasSessionQueue: !!sessionQueue,
+        hasSpotifyQueue: !!spotifyQueue,
+        hasAppleMusicQueue: !!appleMusicQueue
+      });
+      return false;
+    }
+
+    // Filter session queue by source
+    const sessionSpotifyTracks = sessionQueue.filter(track => track.source === 'spotify');
+    const sessionAppleMusicTracks = sessionQueue.filter(track => track.source === 'appleMusic');
+    
+    // Create arrays of IDs for comparison
+    const sessionSpotifyIds = sessionSpotifyTracks.map(track => track.uri);
+    const sessionAppleMusicIds = sessionAppleMusicTracks.map(track => track.appleMusicId);
+    const spotifyIds = spotifyQueue.map(track => track.uri);
+    const appleMusicIds = appleMusicQueue.map(track => track.id);
+
+    // Verify Spotify queue
+    const missingSpotifyTracks = sessionSpotifyIds.filter(id => !spotifyIds.includes(id));
+    if (missingSpotifyTracks.length > 0) {
+      this.debug.error('Spotify queue verification failed - missing tracks', {
+        missingTracks: missingSpotifyTracks,
+        sessionQueueLength: sessionQueue.length,
+        spotifyQueueLength: spotifyQueue.length
+      });
+      return false;
+    }
+
+    // Verify Apple Music queue
+    const missingAppleMusicTracks = sessionAppleMusicIds.filter(id => !appleMusicIds.includes(id));
+    if (missingAppleMusicTracks.length > 0) {
+      this.debug.error('Apple Music queue verification failed - missing tracks', {
+        missingTracks: missingAppleMusicTracks,
+        sessionQueueLength: sessionQueue.length,
+        appleMusicQueueLength: appleMusicQueue.length
+      });
+      return false;
+    }
+
+    // Verify order for both queues
+    const orderedSpotifyIds = spotifyIds.filter(id => sessionSpotifyIds.includes(id));
+    const orderedSessionSpotifyIds = sessionSpotifyIds.filter(id => spotifyIds.includes(id));
+    const orderedAppleMusicIds = appleMusicIds.filter(id => sessionAppleMusicIds.includes(id));
+    const orderedSessionAppleMusicIds = sessionAppleMusicIds.filter(id => appleMusicIds.includes(id));
+
+    const spotifyOrderMatches = orderedSpotifyIds.every((id, index) => id === orderedSessionSpotifyIds[index]);
+    const appleMusicOrderMatches = orderedAppleMusicIds.every((id, index) => id === orderedSessionAppleMusicIds[index]);
+
+    if (!spotifyOrderMatches || !appleMusicOrderMatches) {
+      this.debug.error('Queue verification failed - order mismatch', {
+        spotifyOrderMatches,
+        appleMusicOrderMatches,
+        sessionSpotifyOrder: orderedSessionSpotifyIds,
+        spotifyOrder: orderedSpotifyIds,
+        sessionAppleMusicOrder: orderedSessionAppleMusicIds,
+        appleMusicOrder: orderedAppleMusicIds
+      });
+      return false;
+    }
+
+    this.debug.log('Queue verification passed', {
+      sessionQueueLength: sessionQueue.length,
+      spotifyQueueLength: spotifyQueue.length,
+      appleMusicQueueLength: appleMusicQueue.length,
+      spotifyTracksInSession: sessionSpotifyTracks.length,
+      appleMusicTracksInSession: sessionAppleMusicTracks.length
+    });
+    return true;
+  }
+
+  async syncQueueWithSpotify(sessionQueue) {
+    try {
+      // Only sync Spotify tracks
+      const spotifyTracks = sessionQueue.filter(track => track.source === 'spotify');
+      
+      if (spotifyTracks.length === 0) {
+        this.debug.log('No Spotify tracks to sync');
+        return;
+      }
+
+      const accessToken = localStorage.getItem('spotify_access_token');
+      if (!accessToken) {
+        this.debug.log('No Spotify access token available');
+        return;
+      }
+
+      // Get current Spotify queue
+      const { queue: currentSpotifyQueue } = await getQueue(accessToken);
+      
+      // Handle first track in queue
+      if (spotifyTracks.length > 0) {
+        const firstTrack = spotifyTracks[0];
+        this.debug.log('Handling first track in queue', {
+          trackUri: firstTrack.uri,
+          trackName: firstTrack.name,
+          currentSpotifyQueue
+        });
+
+        // Only add to Spotify queue if it's a Spotify track and not already in queue
+        if (firstTrack.source === 'spotify') {
+          const isAlreadyInQueue = currentSpotifyQueue.some(track => track.uri === firstTrack.uri);
+          if (!isAlreadyInQueue) {
+            this.debug.log('Adding new track to queue first');
+            await spotifyAddToQueue(firstTrack.uri, accessToken);
+          } else {
+            this.debug.log('First track already in queue, skipping');
+          }
+        }
+      }
+
+      // Sync remaining tracks
+      for (let i = 1; i < spotifyTracks.length; i++) {
+        const track = spotifyTracks[i];
+        if (track.source === 'spotify') {
+          const isAlreadyInQueue = currentSpotifyQueue.some(qTrack => qTrack.uri === track.uri);
+          if (!isAlreadyInQueue) {
+            await spotifyAddToQueue(track.uri, accessToken);
+          }
+        }
+      }
+
+      this.debug.log('Spotify queue sync complete');
+    } catch (error) {
+      this.debug.error('Error syncing Spotify queue:', error);
+      throw error;
+    }
+  }
+
+  async syncQueueWithAppleMusic(sessionQueue) {
+    try {
+      // Only sync Apple Music tracks
+      const appleMusicTracks = sessionQueue.filter(track => track.source === 'appleMusic');
+      
+      if (appleMusicTracks.length === 0) {
+        this.debug.log('No Apple Music tracks to sync');
+        return;
+      }
+
+      if (!window.MusicKit) {
+        this.debug.log('MusicKit not available');
+        return;
+      }
+
+      const music = window.MusicKit.getInstance();
+      
+      // Ensure user is authorized
+      if (!music.isAuthorized) {
+        this.debug.log('Authorizing Apple Music user');
+        await music.authorize();
+      }
+
+      // Set up the queue with all Apple Music tracks
+      await music.setQueue({
+        items: appleMusicTracks.map(track => ({
+          id: track.appleMusicId,
+          type: 'songs'
+        }))
+      });
+
+      this.debug.log('Apple Music queue sync complete', {
+        trackCount: appleMusicTracks.length
+      });
+    } catch (error) {
+      this.debug.error('Error syncing Apple Music queue:', error);
+      throw error;
+    }
+  }
+
   async addToQueue(track) {
     if (!this.socket || !this.sessionId) {
       throw new Error('Not connected to a session');
@@ -267,14 +439,16 @@ class QueueService {
     if (!this.isConnected) {
       throw new Error('Socket connection is not active');
     }
-    console.log('App-managed: Adding track to queue:', {
+
+    this.debug.log('Adding track to queue:', {
       trackName: track.name,
       trackUri: track.uri,
       sessionId: this.sessionId,
       source: track.source
     });
+
     try {
-      // Add to Spotify queue if it's a Spotify track
+      // Add to appropriate service queue
       if (track.source === 'spotify') {
         const accessToken = localStorage.getItem('spotify_access_token');
         if (accessToken) {
@@ -285,13 +459,32 @@ class QueueService {
             
             if (!isAlreadyInQueue) {
               await spotifyAddToQueue(track.uri, accessToken);
-              console.log('Spotify: Track added to Spotify queue');
+              this.debug.log('Track added to Spotify queue');
             } else {
-              console.log('Spotify: Track already in queue, skipping');
+              this.debug.log('Track already in Spotify queue, skipping');
             }
           } catch (spotifyError) {
-            console.error('Spotify: Error adding to queue:', spotifyError);
+            this.debug.error('Error adding to Spotify queue:', spotifyError);
             // Continue with app-managed queue even if Spotify queue fails
+          }
+        }
+      } else if (track.source === 'appleMusic') {
+        if (window.MusicKit) {
+          try {
+            const music = window.MusicKit.getInstance();
+            if (!music.isAuthorized) {
+              await music.authorize();
+            }
+            await music.setQueue({
+              items: [{
+                id: track.appleMusicId,
+                type: 'songs'
+              }]
+            });
+            this.debug.log('Track added to Apple Music queue');
+          } catch (appleMusicError) {
+            this.debug.error('Error adding to Apple Music queue:', appleMusicError);
+            // Continue with app-managed queue even if Apple Music queue fails
           }
         }
       }
@@ -301,9 +494,9 @@ class QueueService {
         sessionId: this.sessionId,
         track
       });
-      console.log('App-managed: Emitted add-to-queue event to server');
+      this.debug.log('Emitted add-to-queue event to server');
     } catch (error) {
-      console.error('App-managed: Error adding to queue:', error);
+      this.debug.error('Error adding to queue:', error);
       throw error;
     }
   }
@@ -359,108 +552,55 @@ class QueueService {
       sessionId: this.sessionId
     });
   }
+}
 
-  async verifyQueueSync(sessionQueue, spotifyQueue) {
-    if (!sessionQueue || !spotifyQueue) {
-      console.log('Spotify: Cannot verify queue sync - missing queue data');
-      return false;
-    }
-
-    // Filter session queue to only include Spotify tracks
-    const sessionSpotifyTracks = sessionQueue.filter(track => track.source === 'spotify');
-    
-    // Create arrays of URIs for comparison
-    const sessionUris = sessionSpotifyTracks.map(track => track.uri);
-    const spotifyUris = spotifyQueue.map(track => track.uri);
-
-    // Check if all Spotify tracks from session are in Spotify queue
-    const missingTracks = sessionUris.filter(uri => !spotifyUris.includes(uri));
-    if (missingTracks.length > 0) {
-      console.error('Spotify: Queue verification failed - missing tracks:', {
-        missingTracks,
-        sessionQueueLength: sessionQueue.length,
-        spotifyQueueLength: spotifyQueue.length
-      });
-      return false;
-    }
-
-    // Check if order matches (only for tracks that are in both queues)
-    const orderedSpotifyUris = spotifyUris.filter(uri => sessionUris.includes(uri));
-    const orderedSessionUris = sessionUris.filter(uri => spotifyUris.includes(uri));
-
-    const orderMatches = orderedSpotifyUris.every((uri, index) => uri === orderedSessionUris[index]);
-    if (!orderMatches) {
-      console.error('Spotify: Queue verification failed - order mismatch:', {
-        sessionOrder: orderedSessionUris,
-        spotifyOrder: orderedSpotifyUris
-      });
-      return false;
-    }
-
-    console.log('Spotify: Queue verification passed:', {
-      sessionQueueLength: sessionQueue.length,
-      spotifyQueueLength: spotifyQueue.length,
-      spotifyTracksInSession: sessionSpotifyTracks.length
-    });
-    return true;
+// Debug Logger class
+class DebugLogger {
+  constructor(component) {
+    this.component = component;
+    this.logs = [];
+    this.maxLogs = 1000;
   }
 
-  async syncQueueWithSpotify(sessionQueue) {
-    try {
-      // Only sync Spotify tracks
-      const spotifyTracks = sessionQueue.filter(track => track.source === 'spotify');
-      
-      if (spotifyTracks.length === 0) {
-        console.log('No Spotify tracks to sync');
-        return;
-      }
-
-      const accessToken = localStorage.getItem('spotify_access_token');
-      if (!accessToken) {
-        console.log('No Spotify access token available');
-        return;
-      }
-
-      // Get current Spotify queue
-      const { queue: currentSpotifyQueue } = await getQueue(accessToken);
-      
-      // Handle first track in queue
-      if (spotifyTracks.length > 0) {
-        const firstTrack = spotifyTracks[0];
-        console.log('Spotify: Handling first track in queue', {
-          trackUri: firstTrack.uri,
-          trackName: firstTrack.name,
-          currentSpotifyQueue
-        });
-
-        // Only add to Spotify queue if it's a Spotify track and not already in queue
-        if (firstTrack.source === 'spotify') {
-          const isAlreadyInQueue = currentSpotifyQueue.some(track => track.uri === firstTrack.uri);
-          if (!isAlreadyInQueue) {
-            console.log('Spotify: Adding new track to queue first');
-            await spotifyAddToQueue(firstTrack.uri, accessToken);
-          } else {
-            console.log('Spotify: First track already in queue, skipping');
-          }
-        }
-      }
-
-      // Sync remaining tracks
-      for (let i = 1; i < spotifyTracks.length; i++) {
-        const track = spotifyTracks[i];
-        if (track.source === 'spotify') {
-          const isAlreadyInQueue = currentSpotifyQueue.some(qTrack => qTrack.uri === track.uri);
-          if (!isAlreadyInQueue) {
-            await spotifyAddToQueue(track.uri, accessToken);
-          }
-        }
-      }
-
-      console.log('Spotify: Queue sync complete');
-    } catch (error) {
-      console.error('Spotify: Error syncing queue:', error);
-      throw error;
+  log(message, data = {}) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      component: this.component,
+      message,
+      data
+    };
+    
+    this.logs.push(logEntry);
+    if (this.logs.length > this.maxLogs) {
+      this.logs.shift();
     }
+
+    console.log(`[${this.component}] ${message}`, data);
+  }
+
+  error(message, error) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      component: this.component,
+      message: `ERROR: ${message}`,
+      error: error.message,
+      stack: error.stack
+    };
+    
+    this.logs.push(logEntry);
+    if (this.logs.length > this.maxLogs) {
+      this.logs.shift();
+    }
+
+    console.error(`[${this.component}] ERROR: ${message}`, error);
+  }
+
+  getLogs() {
+    return this.logs;
+  }
+
+  clearLogs() {
+    this.logs = [];
   }
 }
 

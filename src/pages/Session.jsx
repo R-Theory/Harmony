@@ -319,19 +319,19 @@ export default function Session() {
 
     // Prevent multiple syncs from happening at once
     if (isQueueSyncing) {
-      console.log('[DEBUG][Session] Queue sync already in progress, skipping');
+      debug.log('[DEBUG][Session] Queue sync already in progress, skipping');
       return;
     }
 
     // Check if we're syncing too frequently
     const now = Date.now();
     if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL) {
-      console.log('[DEBUG][Session] Queue sync too soon, skipping');
+      debug.log('[DEBUG][Session] Queue sync too soon, skipping');
       return;
     }
 
     if (!spotifyPlayerRef.current) {
-      console.error('[DEBUG][Session] Invalid Spotify player instance');
+      debug.error('[DEBUG][Session] Invalid Spotify player instance');
       return;
     }
 
@@ -342,7 +342,7 @@ export default function Session() {
       // Get current Spotify state
       const state = await spotifyPlayerRef.current.getCurrentState();
       const currentUri = state?.track_window?.current_track?.uri;
-      console.log('[DEBUG][Session] Current Spotify state:', { currentUri, state });
+      debug.log('[DEBUG][Session] Current Spotify state:', { currentUri, state });
 
       // Only sync Spotify tracks
       const spotifyTracks = queue.filter(track => track.source === 'spotify');
@@ -351,7 +351,7 @@ export default function Session() {
       if (spotifyTracks.length === 1) {
         const firstTrack = spotifyTracks[0];
         const shouldLoad = currentUri !== firstTrack.uri;
-        console.log('[DEBUG][Session] Processing first track:', {
+        debug.log('[DEBUG][Session] Processing first track:', {
           firstTrackUri: firstTrack.uri,
           firstTrackName: firstTrack.name,
           currentUri,
@@ -359,7 +359,7 @@ export default function Session() {
         });
 
         if (shouldLoad) {
-          console.log('[DEBUG][Session] Loading new track', {
+          debug.log('[DEBUG][Session] Loading new track', {
             currentUri,
             newUri: firstTrack.uri,
             isInitialQueueSetup,
@@ -382,10 +382,13 @@ export default function Session() {
         }
       }
 
-      console.log('[DEBUG][Session] Queue sync completed successfully');
+      debug.log('[DEBUG][Session] Queue sync completed successfully');
     } catch (error) {
-      console.error('[DEBUG][Session] Error syncing queue:', error);
+      debug.error('[DEBUG][Session] Error syncing queue:', error);
+      // Show error notification to user
+      showQueueNotification('Failed to sync queue with Spotify', 'error');
     } finally {
+      // Always reset syncing state, even if there was an error
       setIsQueueSyncing(false);
     }
   };
@@ -443,48 +446,74 @@ export default function Session() {
   // Update the handleSkipNext function to include safety checks
   const handleSkipNext = async () => {
     if (!queue.length) {
-      console.log('[DEBUG][Session] No tracks in queue');
+      debug.log('No tracks in queue');
       return;
     }
 
     const nextTrack = queue[0];
-    console.log('[DEBUG][Session] Skipping to next track:', {
+    debug.log('Skipping to next track:', {
       nextTrack,
       currentTrack,
       queueLength: queue.length
     });
 
     try {
-      // If next track is from Apple Music
-      if (nextTrack.source === 'appleMusic') {
-        console.log('[DEBUG][Session] Next track is from Apple Music, pausing Spotify');
-        
-        // Pause Spotify if it's playing
+      // Store current playback state
+      const currentService = currentTrack?.source;
+      const wasPlaying = isPlaying;
+
+      // Pause current service
+      if (currentService === 'spotify' && spotifyPlayerRef.current) {
+        try {
+          await spotifyPlayerRef.current.pause();
+          debug.log('Spotify paused successfully');
+        } catch (error) {
+          debug.error('Error pausing Spotify:', error);
+        }
+      } else if (currentService === 'appleMusic' && window.MusicKit) {
+        try {
+          const music = window.MusicKit.getInstance();
+          await music.player.pause();
+          debug.log('Apple Music paused successfully');
+        } catch (error) {
+          debug.error('Error pausing Apple Music:', error);
+        }
+      }
+
+      // Remove current track from queue
+      queue.shift();
+      setQueue([...queue]);
+
+      // Setup new service
+      if (nextTrack.source === 'spotify') {
+        debug.log('Setting up Spotify playback');
         if (spotifyPlayerRef.current) {
           try {
-            await spotifyPlayerRef.current.pause();
-            console.log('[DEBUG][Session] Spotify paused successfully');
+            // Use the Spotify Web Playback SDK's play method instead of load
+            await spotifyPlayerRef.current.play({
+              uris: [nextTrack.uri]
+            });
+            debug.log('Spotify playback started');
+            setCurrentTrack(nextTrack);
           } catch (error) {
-            console.error('[DEBUG][Session] Error pausing Spotify:', error);
+            debug.error('Error setting up Spotify playback:', error);
           }
         }
-
-        // Remove current track from queue
-        queue.shift();
-        setQueue([...queue]);
-
-        // Start playing Apple Music track
-        if (window.MusicKit && appleMusicUserToken) {
+      } else if (nextTrack.source === 'appleMusic') {
+        debug.log('Setting up Apple Music playback');
+        if (window.MusicKit) {
           try {
-            console.log('[DEBUG][Session] Setting up Apple Music playback');
             const music = window.MusicKit.getInstance();
             
             // Ensure user is authorized
             if (!music.isAuthorized) {
-              console.log('[DEBUG][Session] Authorizing Apple Music user');
+              debug.log('Authorizing Apple Music user');
               await music.authorize();
             }
 
+            // Clear existing queue first
+            await music.player.stop();
+            
             // Set up the queue with the track
             await music.setQueue({
               items: [{
@@ -492,57 +521,28 @@ export default function Session() {
                 type: 'songs'
               }]
             });
-            console.log('[DEBUG][Session] Apple Music queue set successfully');
 
-            // Start playback
-            await music.player.play();
-            console.log('[DEBUG][Session] Apple Music playback started');
+            // Start playback if it was playing before
+            if (wasPlaying) {
+              await music.player.play();
+              debug.log('Apple Music playback started');
+            } else {
+              debug.log('Apple Music track loaded but not playing');
+            }
 
-            // Update current track state
+            // Update current track state with proper URL
             setCurrentTrack({
               ...nextTrack,
               url: `https://music.apple.com/us/song/${nextTrack.appleMusicId}`
             });
           } catch (error) {
-            console.error('[DEBUG][Session] Error setting up Apple Music playback:', error);
-          }
-        }
-      } else {
-        // Handle Spotify track
-        console.log('[DEBUG][Session] Next track is from Spotify');
-        
-        // Pause Apple Music if it's playing
-        if (window.MusicKit) {
-          try {
-            const music = window.MusicKit.getInstance();
-            await music.player.pause();
-            console.log('[DEBUG][Session] Apple Music paused successfully');
-          } catch (error) {
-            console.error('[DEBUG][Session] Error pausing Apple Music:', error);
-          }
-        }
-
-        // Remove current track from queue
-        queue.shift();
-        setQueue([...queue]);
-
-        // Start playing Spotify track
-        if (spotifyPlayerRef.current) {
-          try {
-            console.log('[DEBUG][Session] Setting up Spotify playback');
-            await spotifyPlayerRef.current.load(nextTrack.uri);
-            await spotifyPlayerRef.current.resume();
-            console.log('[DEBUG][Session] Spotify playback started');
-
-            // Update current track state
-            setCurrentTrack(nextTrack);
-          } catch (error) {
-            console.error('[DEBUG][Session] Error setting up Spotify playback:', error);
+            debug.error('Error setting up Apple Music playback:', error);
+            showQueueNotification('Failed to play Apple Music track', 'error');
           }
         }
       }
     } catch (error) {
-      console.error('[DEBUG][Session] Error in handleSkipNext:', error);
+      debug.error('Error in handleSkipNext:', error);
     }
   };
 
@@ -552,39 +552,55 @@ export default function Session() {
       const music = window.MusicKit.getInstance();
       
       const handlePlaybackStateChange = (event) => {
-        console.log('Apple Music playback state changed:', event);
+        debug.log('Apple Music playback state changed:', event);
         setIsPlaying(!event.player.paused);
       };
 
+      const handleQueueChange = (event) => {
+        debug.log('Apple Music queue changed:', event);
+      };
+
+      const handleError = (event) => {
+        debug.error('Apple Music error:', event);
+      };
+
       music.addEventListener('playbackStateDidChange', handlePlaybackStateChange);
-      music.addEventListener('queueItemsDidChange', (event) => {
-        console.log('Apple Music queue changed:', event);
-      });
+      music.addEventListener('queueItemsDidChange', handleQueueChange);
+      music.addEventListener('error', handleError);
 
       return () => {
         music.removeEventListener('playbackStateDidChange', handlePlaybackStateChange);
+        music.removeEventListener('queueItemsDidChange', handleQueueChange);
+        music.removeEventListener('error', handleError);
       };
     }
   }, []);
 
-  // Update handleAddToQueue with more logging
+  // Update handleAddToQueue with improved track formatting
   const handleAddToQueue = async (track) => {
     try {
       // Format the track based on its source
       const formattedTrack = {
         ...track,
         source: track.source || (track.uri?.startsWith('spotify:') ? 'spotify' : 'appleMusic'),
-        uri: track.uri || track.appleMusicId, // Use appleMusicId as URI for Apple Music tracks
+        uri: track.uri || track.appleMusicId,
         name: track.name || track.title,
         artists: track.artists || track.artist?.split(',').map(a => ({ name: a.trim() })),
         album: track.album || { name: track.albumName },
         duration_ms: track.duration_ms || (track.duration * 1000),
         albumArt: track.albumArt || track.artwork?.url,
-        // Add URL for Apple Music tracks
         url: track.source === 'appleMusic' ? `https://music.apple.com/us/song/${track.appleMusicId}` : track.url
       };
 
       debug.log('Adding new track to queue', { formattedTrack });
+
+      // Validate required fields
+      const requiredFields = ['name', 'artists', 'source'];
+      const missingFields = requiredFields.filter(field => !formattedTrack[field]);
+      
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
 
       // Add to queue service
       await queueService.addToQueue(formattedTrack);
@@ -592,7 +608,7 @@ export default function Session() {
       // Show success notification
       showQueueNotification(`Added ${formattedTrack.name} to queue`);
     } catch (error) {
-      debug.logError(error, 'Error adding track to queue');
+      debug.error('Error adding track to queue:', error);
       showQueueNotification('Failed to add track to queue', 'error');
     }
   };
@@ -1019,6 +1035,13 @@ export default function Session() {
     const handlePlayerStateChange = (state) => {
       if (!state) return;
       
+      debug.log('Spotify player state changed', {
+        track: state.track_window?.current_track,
+        isPlaying: !state.paused,
+        position: state.position,
+        duration: state.duration
+      });
+
       // Only update if the state actually changed
       const newIsPlaying = !state.paused;
       if (newIsPlaying !== isPlaying) {
@@ -1034,11 +1057,11 @@ export default function Session() {
           albumArt: state.track_window.current_track.album?.images?.[0]?.url,
           source: 'spotify',
           uri: state.track_window.current_track.uri,
-          duration: Math.floor(state.track_window.current_track.duration_ms / 1000) // Convert to seconds
+          duration: Math.floor(state.track_window.current_track.duration_ms / 1000)
         };
         setCurrentTrack(currentTrack);
         setProgress(state.position);
-        setDuration(Math.floor(state.duration / 1000)); // Convert to seconds
+        setDuration(Math.floor(state.duration / 1000));
       }
     };
 
