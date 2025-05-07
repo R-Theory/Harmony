@@ -270,7 +270,8 @@ class QueueService {
     console.log('App-managed: Adding track to queue:', {
       trackName: track.name,
       trackUri: track.uri,
-      sessionId: this.sessionId
+      sessionId: this.sessionId,
+      source: track.source
     });
     try {
       // Add to Spotify queue if it's a Spotify track
@@ -278,8 +279,16 @@ class QueueService {
         const accessToken = localStorage.getItem('spotify_access_token');
         if (accessToken) {
           try {
-            await spotifyAddToQueue(track.uri, accessToken);
-            console.log('Spotify: Track added to Spotify queue');
+            // Check if track is already in queue before adding
+            const { queue: currentQueue } = await getQueue(accessToken);
+            const isAlreadyInQueue = currentQueue.some(qTrack => qTrack.uri === track.uri);
+            
+            if (!isAlreadyInQueue) {
+              await spotifyAddToQueue(track.uri, accessToken);
+              console.log('Spotify: Track added to Spotify queue');
+            } else {
+              console.log('Spotify: Track already in queue, skipping');
+            }
           } catch (spotifyError) {
             console.error('Spotify: Error adding to queue:', spotifyError);
             // Continue with app-managed queue even if Spotify queue fails
@@ -424,10 +433,15 @@ class QueueService {
           currentSpotifyQueue
         });
 
-        // Only add to Spotify queue if it's a Spotify track
+        // Only add to Spotify queue if it's a Spotify track and not already in queue
         if (firstTrack.source === 'spotify') {
-          console.log('Spotify: Adding new track to queue first');
-          await spotifyAddToQueue(firstTrack.uri, accessToken);
+          const isAlreadyInQueue = currentSpotifyQueue.some(track => track.uri === firstTrack.uri);
+          if (!isAlreadyInQueue) {
+            console.log('Spotify: Adding new track to queue first');
+            await spotifyAddToQueue(firstTrack.uri, accessToken);
+          } else {
+            console.log('Spotify: First track already in queue, skipping');
+          }
         }
       }
 
@@ -435,7 +449,10 @@ class QueueService {
       for (let i = 1; i < spotifyTracks.length; i++) {
         const track = spotifyTracks[i];
         if (track.source === 'spotify') {
-          await spotifyAddToQueue(track.uri, accessToken);
+          const isAlreadyInQueue = currentSpotifyQueue.some(qTrack => qTrack.uri === track.uri);
+          if (!isAlreadyInQueue) {
+            await spotifyAddToQueue(track.uri, accessToken);
+          }
         }
       }
 
