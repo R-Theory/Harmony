@@ -8,6 +8,9 @@ class QueueService {
     this.onQueueUpdate = null;
     this.onError = null;
     this.isConnected = false;
+    this.isSyncing = false;
+    this.lastSyncTime = 0;
+    this.SYNC_COOLDOWN = 2000; // 2 seconds between syncs
   }
 
   connect(sessionId) {
@@ -319,11 +322,27 @@ class QueueService {
   async syncQueueWithSpotify(queue) {
     if (!queue || queue.length === 0) return;
 
+    // Prevent multiple syncs from happening at once
+    if (this.isSyncing) {
+      console.log('Spotify: Queue sync already in progress, skipping');
+      return;
+    }
+
+    // Check if we're syncing too frequently
+    const now = Date.now();
+    if (now - this.lastSyncTime < this.SYNC_COOLDOWN) {
+      console.log('Spotify: Queue sync too soon, skipping');
+      return;
+    }
+
     const accessToken = localStorage.getItem('spotify_access_token');
     if (!accessToken) {
       console.log('Spotify: No access token available for queue sync');
       return;
     }
+
+    this.isSyncing = true;
+    this.lastSyncTime = now;
 
     try {
       // Get current Spotify queue
@@ -387,6 +406,8 @@ class QueueService {
         localStorage.removeItem('spotify_access_token');
         window.location.reload();
       }
+    } finally {
+      this.isSyncing = false;
     }
   }
 }
