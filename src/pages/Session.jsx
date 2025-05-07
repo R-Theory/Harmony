@@ -770,6 +770,9 @@ export default function Session() {
         }
       });
       
+      // Helper function to convert ms to seconds
+      const msToSeconds = (ms) => Math.floor(ms / 1000);
+
       // Update the player state change handler
       spotifyPlayer.addListener('player_state_changed', async state => {
         if (state) {
@@ -797,7 +800,7 @@ export default function Session() {
 
             // Check if we need to sync progress
             const shouldSyncProgress = 
-              // Track is paused
+              // Track is paused - always sync when paused
               state.paused ||
               // Near the end of the track
               timeUntilEnd < TRACK_END_THRESHOLD ||
@@ -816,13 +819,14 @@ export default function Session() {
                   // If the difference is significant or track is paused, update our progress
                   if (timeDifference > PROGRESS_SYNC_THRESHOLD || state.paused) {
                     debug.log('[Spotify] Syncing progress with Spotify:', {
-                      localPosition: state.position,
-                      spotifyPosition: spotifyState.position,
-                      difference: timeDifference,
+                      localPosition: msToSeconds(state.position),
+                      spotifyPosition: msToSeconds(spotifyState.position),
+                      difference: msToSeconds(timeDifference),
                       isPaused: state.paused
                     });
-                    setProgress(spotifyState.position);
-                    setDuration(spotifyState.duration);
+                    // Convert to seconds before setting
+                    setProgress(msToSeconds(spotifyState.position));
+                    setDuration(msToSeconds(spotifyState.duration));
                     setLastSyncCheck(now);
                   }
                 }
@@ -832,8 +836,9 @@ export default function Session() {
             } else {
               // Normal progress update with debouncing
               if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
-                setProgress(state.position);
-                setDuration(state.duration);
+                // Convert to seconds before setting
+                setProgress(msToSeconds(state.position));
+                setDuration(msToSeconds(state.duration));
                 setLastProgressUpdate(now);
               }
             }
