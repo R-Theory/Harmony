@@ -306,26 +306,52 @@ export default function Session() {
     };
   }, [peerConnection]);
   
-  // Update the syncQueueWithSpotify function
+  // Update the syncQueueWithSpotify function with more detailed logging
   const syncQueueWithSpotify = async (newQueue) => {
-    if (!spotifyPlayerRef.current || !newQueue || isQueueSyncing) return;
+    if (!spotifyPlayerRef.current || !newQueue || isQueueSyncing) {
+      debug.log('[DEBUG][Session] Skipping queue sync:', {
+        hasPlayer: !!spotifyPlayerRef.current,
+        hasQueue: !!newQueue,
+        isQueueSyncing,
+        queueLength: newQueue?.length
+      });
+      return;
+    }
     
     try {
       setIsQueueSyncing(true);
-      debug.log('[DEBUG][Session] Syncing queue with Spotify', { 
+      debug.log('[DEBUG][Session] Starting queue sync', { 
         queueLength: newQueue.length,
         isInitialQueueSetup,
-        hasInitialTrackLoaded
+        hasInitialTrackLoaded,
+        queueContents: newQueue.map(t => ({ uri: t.uri, name: t.name }))
       });
       
       // Get current Spotify state
       const state = await spotifyPlayerRef.current.getCurrentState();
       const currentUri = state?.track_window?.current_track?.uri;
       
+      debug.log('[DEBUG][Session] Current Spotify state:', {
+        currentUri,
+        state: state ? {
+          paused: state.paused,
+          duration: state.duration,
+          position: state.position,
+          currentTrack: state.track_window?.current_track?.name
+        } : null
+      });
+      
       // If we have a queue, ensure the first track is loaded
       if (newQueue.length > 0) {
         const firstTrack = newQueue[0];
         const mappedTrack = normalizeSpotifyTrack(firstTrack);
+        
+        debug.log('[DEBUG][Session] Processing first track:', {
+          firstTrackUri: mappedTrack.uri,
+          firstTrackName: mappedTrack.name,
+          currentUri,
+          shouldLoad: currentUri !== mappedTrack.uri
+        });
         
         // If the current track is different from what we want, load the new track
         if (currentUri !== mappedTrack.uri) {
@@ -333,11 +359,13 @@ export default function Session() {
             currentUri, 
             newUri: mappedTrack.uri,
             isInitialQueueSetup,
-            hasInitialTrackLoaded
+            hasInitialTrackLoaded,
+            trackName: mappedTrack.name
           });
           
           try {
             // Pause current playback
+            debug.log('[DEBUG][Session] Pausing current playback');
             await spotifyPlayerRef.current.pause();
             // Wait for pause to take effect
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -346,6 +374,7 @@ export default function Session() {
             if (spotifyPlayerRef.current && typeof spotifyPlayerRef.current.load === 'function') {
               // For initial queue setup, we want to load and play
               if (isInitialQueueSetup && !hasInitialTrackLoaded) {
+                debug.log('[DEBUG][Session] Initial track setup - loading and playing');
                 await spotifyPlayerRef.current.load(mappedTrack.uri);
                 // Wait for load to complete
                 await new Promise(resolve => setTimeout(resolve, 500));
@@ -353,16 +382,19 @@ export default function Session() {
                 await spotifyPlayerRef.current.resume();
                 setIsPlaying(true);
                 setHasInitialTrackLoaded(true);
+                debug.log('[DEBUG][Session] Initial track loaded and playing');
               } else {
-                // For subsequent updates, just load and pause
+                debug.log('[DEBUG][Session] Subsequent update - loading and pausing');
                 await spotifyPlayerRef.current.load(mappedTrack.uri);
                 await new Promise(resolve => setTimeout(resolve, 500));
                 await spotifyPlayerRef.current.pause();
                 setIsPlaying(false);
+                debug.log('[DEBUG][Session] Track loaded and paused');
               }
               
               // Update our state
               setCurrentTrack(mappedTrack);
+              debug.log('[DEBUG][Session] Current track state updated');
             } else {
               debug.logError('[DEBUG][Session] Invalid Spotify player instance');
             }
@@ -379,11 +411,13 @@ export default function Session() {
               }
             }
           }
+        } else {
+          debug.log('[DEBUG][Session] Track already loaded, skipping load operation');
         }
       } else {
         // If queue is empty, clear the current track
         if (currentUri) {
-          debug.log('[DEBUG][Session] Clearing current track');
+          debug.log('[DEBUG][Session] Clearing current track - empty queue');
           await spotifyPlayerRef.current.pause();
           setCurrentTrack(null);
           setIsPlaying(false);
@@ -394,10 +428,11 @@ export default function Session() {
       
       // After first successful sync, mark initial setup as complete
       if (isInitialQueueSetup) {
+        debug.log('[DEBUG][Session] Marking initial setup as complete');
         setIsInitialQueueSetup(false);
       }
       
-      debug.log('[DEBUG][Session] Queue sync completed');
+      debug.log('[DEBUG][Session] Queue sync completed successfully');
     } catch (error) {
       debug.logError('[DEBUG][Session] Error syncing queue with Spotify:', error);
     } finally {
@@ -405,18 +440,32 @@ export default function Session() {
     }
   };
 
-  // Add debouncing for queue updates
+  // Update the queue callback useEffect with more logging
   const [lastQueueUpdate, setLastQueueUpdate] = useState(0);
 
-  // Update the queue callback useEffect
   useEffect(() => {
-    if (!queueService.socket) return;
+    if (!queueService.socket) {
+      debug.log('[DEBUG][Session] No socket connection, skipping queue callback setup');
+      return;
+    }
 
+    debug.log('[DEBUG][Session] Setting up queue callbacks');
+    
     queueService.setCallbacks(
       async (updatedQueue) => {
         const now = Date.now();
+        debug.log('[DEBUG][Session] Queue update received:', {
+          timeSinceLastUpdate: now - lastQueueUpdate,
+          requiredInterval: QUEUE_UPDATE_INTERVAL,
+          isQueueSyncing,
+          isInitialQueueSetup,
+          hasInitialTrackLoaded,
+          queueLength: updatedQueue?.length,
+          queueContents: updatedQueue?.map(t => ({ uri: t.uri, name: t.name }))
+        });
+
         if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL || isQueueSyncing) {
-          debug.log('Queue update rate limited or sync in progress', {
+          debug.log('[DEBUG][Session] Queue update rate limited or sync in progress', {
             timeSinceLastUpdate: now - lastQueueUpdate,
             requiredInterval: QUEUE_UPDATE_INTERVAL,
             isQueueSyncing,
@@ -433,7 +482,7 @@ export default function Session() {
         await syncQueueWithSpotify(updatedQueue);
       },
       (errorMessage) => {
-        debug.logError(errorMessage, 'queueService');
+        debug.logError('[DEBUG][Session] Queue service error:', errorMessage);
         setError({ message: errorMessage });
       }
     );
@@ -476,21 +525,33 @@ export default function Session() {
     }
   };
 
-  // Update handleAddToQueue to handle initial queue setup
+  // Update handleAddToQueue with more logging
   const handleAddToQueue = async (track) => {
     try {
+      debug.log('[DEBUG][Session] Adding track to queue:', {
+        trackUri: track.uri,
+        trackName: track.name,
+        currentQueueLength: queue.length,
+        isInitialQueueSetup,
+        hasInitialTrackLoaded
+      });
+
       // Check if the track is already in the queue
       const isAlreadyInQueue = queue.some(q => q.uri === track.uri);
       if (isAlreadyInQueue) {
-        debug.log('[DEBUG][Session][queueService] Track already in queue:', track);
+        debug.log('[DEBUG][Session] Track already in queue:', {
+          trackUri: track.uri,
+          trackName: track.name
+        });
         showQueueNotification(`"${track.name}" is already in the queue`);
         return;
       }
 
-      debug.log('[DEBUG][Session][queueService] Song added to queue:', track);
+      debug.log('[DEBUG][Session] Adding new track to queue');
       await queueService.addToQueue(track);
       showQueueNotification(`Added "${track.name}" to session queue`);
     } catch (error) {
+      debug.logError('[DEBUG][Session] Error adding track to queue:', error);
       showQueueNotification(error.message, 'error');
     }
   };
