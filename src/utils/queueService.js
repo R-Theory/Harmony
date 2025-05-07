@@ -431,8 +431,12 @@ class QueueService {
       if (queue.length === 1) {
         console.log('Spotify: Handling first track in queue');
         try {
-          // Instead of skipping through tracks, we'll just add our track
-          // Spotify will automatically clear the queue when adding a new track
+          // First, skip the current track to clear it
+          await skipToNext(accessToken);
+          console.log('Spotify: Skipped current track');
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Then add our track
           await spotifyAddToQueue(queue[0].uri, accessToken);
           console.log('Spotify: Added first track to queue:', queue[0].name);
           
@@ -441,7 +445,16 @@ class QueueService {
           
           // Verify the sync
           const { queue: newSpotifyQueue } = await getQueue(accessToken);
-          await this.verifyQueueSync(queue, newSpotifyQueue);
+          const syncSuccess = await this.verifyQueueSync(queue, newSpotifyQueue);
+          
+          if (!syncSuccess) {
+            console.log('Spotify: Queue verification failed, retrying sync...');
+            // If verification failed, try one more time
+            await skipToNext(accessToken);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await spotifyAddToQueue(queue[0].uri, accessToken);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
           return;
         } catch (error) {
           console.error('Spotify: Error handling first track:', error);
