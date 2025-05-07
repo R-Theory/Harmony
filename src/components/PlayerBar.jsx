@@ -58,12 +58,8 @@ const PlayerBar = ({
       progressInterval.current = setInterval(() => {
         setLocalProgress(prev => {
           const newProgress = prev + 1; // Add 1 second
-          if (newProgress >= duration) {
-            clearInterval(progressInterval.current);
-            onSkipNext(); // Automatically skip to next track when current one ends
-            return 0;
-          }
-          return newProgress;
+          // Remove the manual track ending logic and let Spotify handle it
+          return newProgress <= duration ? newProgress : duration;
         });
       }, 1000);
     } else {
@@ -73,7 +69,7 @@ const PlayerBar = ({
     return () => {
       clearInterval(progressInterval.current);
     };
-  }, [isPlaying, currentTrack, duration, isSeeking, onSkipNext]);
+  }, [isPlaying, currentTrack, duration, isSeeking]);
 
   const handleProgressChange = (event, newValue) => {
     if (!currentTrack) return;

@@ -786,7 +786,7 @@ export default function Session() {
               albumArt: state.track_window.current_track.album?.images?.[0]?.url,
               source: 'spotify',
               uri: state.track_window.current_track.uri,
-              duration: state.track_window.current_track.duration_ms
+              duration: Math.floor(state.track_window.current_track.duration_ms / 1000) // Convert to seconds
             };
             
             // Only update track if it's different
@@ -800,13 +800,9 @@ export default function Session() {
 
             // Check if we need to sync progress
             const shouldSyncProgress = 
-              // Track is paused - always sync when paused
               state.paused ||
-              // Near the end of the track
               timeUntilEnd < TRACK_END_THRESHOLD ||
-              // Halfway through the track
               (trackProgress > MID_TRACK_SYNC_THRESHOLD && trackProgress < MID_TRACK_SYNC_THRESHOLD + 0.1) ||
-              // Regular sync check interval
               now - lastSyncCheck > SYNC_CHECK_INTERVAL;
 
             if (shouldSyncProgress) {
@@ -816,7 +812,6 @@ export default function Session() {
                   const spotifyTimeUntilEnd = spotifyState.duration - spotifyState.position;
                   const timeDifference = Math.abs(spotifyTimeUntilEnd - timeUntilEnd);
 
-                  // If the difference is significant or track is paused, update our progress
                   if (timeDifference > PROGRESS_SYNC_THRESHOLD || state.paused) {
                     debug.log('[Spotify] Syncing progress with Spotify:', {
                       localPosition: msToSeconds(state.position),
@@ -824,9 +819,8 @@ export default function Session() {
                       difference: msToSeconds(timeDifference),
                       isPaused: state.paused
                     });
-                    // Convert to seconds before setting
                     setProgress(msToSeconds(spotifyState.position));
-                    setDuration(msToSeconds(spotifyState.duration));
+                    setDuration(Math.floor(spotifyState.duration / 1000)); // Convert to seconds
                     setLastSyncCheck(now);
                   }
                 }
@@ -834,11 +828,9 @@ export default function Session() {
                 debug.logError('[Spotify] Error checking track progress:', error);
               }
             } else {
-              // Normal progress update with debouncing
               if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
-                // Convert to seconds before setting
                 setProgress(msToSeconds(state.position));
-                setDuration(msToSeconds(state.duration));
+                setDuration(Math.floor(state.duration / 1000)); // Convert to seconds
                 setLastProgressUpdate(now);
               }
             }
@@ -950,11 +942,11 @@ export default function Session() {
           albumArt: state.track_window.current_track.album?.images?.[0]?.url,
           source: 'spotify',
           uri: state.track_window.current_track.uri,
-          duration: state.track_window.current_track.duration_ms
+          duration: Math.floor(state.track_window.current_track.duration_ms / 1000) // Convert to seconds
         };
         setCurrentTrack(currentTrack);
         setProgress(state.position);
-        setDuration(state.duration);
+        setDuration(Math.floor(state.duration / 1000)); // Convert to seconds
       }
     };
 
