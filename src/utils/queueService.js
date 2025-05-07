@@ -447,6 +447,10 @@ class QueueService {
             // Wait a moment for Spotify to process the change
             await new Promise(resolve => setTimeout(resolve, 1000));
 
+            // Skip the current track to start playing our queued track
+            await skipToNext(accessToken);
+            console.log('Spotify: Skipped current track to start playing queued track');
+
             // Verify the sync once
             const { queue: newSpotifyQueue } = await getQueue(accessToken);
             const syncSuccess = await this.verifyQueueSync(queue, newSpotifyQueue);
