@@ -226,106 +226,6 @@ const MusicPlayer = ({
     }
   };
 
-  // Handle Spotify playback
-  useEffect(() => {
-    if (track?.source === 'spotify' && window.Spotify && spotifyPlayerRef?.current) {
-      const player = spotifyPlayerRef.current;
-      const accessToken = localStorage.getItem('spotify_access_token');
-
-      if (!accessToken) {
-        debug.log('No Spotify access token found');
-        return;
-      }
-
-      const handlePlayerStateChanged = async (state) => {
-        if (!state) return;
-
-        // Feedback loop protection: ignore SDK state changes caused by our own command
-        if (Date.now() - lastCommandTime.current < COMMAND_IGNORE_WINDOW) {
-          return;
-        }
-
-        // Update playback state
-        const isPlaying = !state.paused;
-        setIsPlaying(isPlaying);
-
-        // Update progress
-        setProgress(state.position);
-        setDuration(state.duration);
-
-        // Handle track changes
-        if (state.track_window?.current_track) {
-          const newTrack = {
-            ...state.track_window.current_track,
-            title: state.track_window.current_track.name,
-            artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
-            albumArt: state.track_window.current_track.album?.images?.[0]?.url,
-            uri: state.track_window.current_track.uri,
-            duration: state.track_window.current_track.duration_ms
-          };
-
-          if (newTrack.uri !== currentTrack?.uri) {
-            debug.log('Track changed in player', {
-              previousTrack: currentTrack?.uri,
-              newTrack: newTrack.uri
-            });
-
-            setCurrentTrack(newTrack);
-            if (onTrackChange) {
-              onTrackChange(newTrack);
-            }
-          }
-        }
-      };
-
-      const handleInitializationError = (error) => {
-        debug.logError(error, 'Player initialization');
-        setError(error.message);
-      };
-
-      const handleAuthenticationError = (error) => {
-        debug.logError(error, 'Player authentication');
-        setError(error.message);
-      };
-
-      const handleAccountError = (error) => {
-        debug.logError(error, 'Player account');
-        setError(error.message);
-      };
-
-      const handlePlaybackError = (error) => {
-        // Only log non-critical errors
-        if (!error.message?.includes('item_before_load') && !error.message?.includes('PlayLoad event failed with status 404')) {
-          debug.logError(error, 'Player playback');
-          setError(error.message);
-        }
-      };
-
-      // Add event listeners
-      player.addListener('player_state_changed', handlePlayerStateChanged);
-      player.addListener('initialization_error', handleInitializationError);
-      player.addListener('authentication_error', handleAuthenticationError);
-      player.addListener('account_error', handleAccountError);
-      player.addListener('playback_error', handlePlaybackError);
-
-      // Get initial state
-      player.getCurrentState().then(state => {
-        if (state) {
-          handlePlayerStateChanged(state);
-        }
-      });
-
-      // Cleanup
-      return () => {
-        player.removeListener('player_state_changed', handlePlayerStateChanged);
-        player.removeListener('initialization_error', handleInitializationError);
-        player.removeListener('authentication_error', handleAuthenticationError);
-        player.removeListener('account_error', handleAccountError);
-        player.removeListener('playback_error', handlePlaybackError);
-      };
-    }
-  }, [track, spotifyPlayerRef, onTrackChange]);
-
   // Handle Apple Music playback
   useEffect(() => {
     if (track?.source === 'appleMusic' && window.MusicKit && appleMusicUserToken) {
@@ -390,6 +290,44 @@ const MusicPlayer = ({
       };
     }
   }, [track, isPlaying, volume, appleMusicUserToken, onProgressUpdate]);
+
+  // Handle Spotify playback
+  useEffect(() => {
+    if (track?.source === 'spotify' && spotifyPlayerRef.current) {
+      // Pause Apple Music if it's playing
+      if (musicKitRef.current) {
+        musicKitRef.current.pause().catch(error => {
+          debug.logError(error, 'Error pausing Apple Music');
+        });
+      }
+
+      const playSpotifyTrack = async () => {
+        try {
+          if (track.uri) {
+            debug.log('Setting Spotify queue', { track });
+            
+            // Set the queue with the track
+            await spotifyPlayerRef.current.load(track.uri);
+            
+            // Set volume
+            spotifyPlayerRef.current.setVolume(volume / 100);
+            
+            if (isPlaying) {
+              debug.log('Starting Spotify playback');
+              await spotifyPlayerRef.current.resume();
+            } else {
+              await spotifyPlayerRef.current.pause();
+            }
+          }
+        } catch (error) {
+          debug.logError(error, 'Error playing Spotify track');
+          setError(error.message);
+        }
+      };
+
+      playSpotifyTrack();
+    }
+  }, [track, isPlaying, volume]);
 
   // Handle track changes
   useEffect(() => {

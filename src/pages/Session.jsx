@@ -476,54 +476,29 @@ export default function Session() {
 
   // Update handleAddToQueue with more logging
   const handleAddToQueue = async (track) => {
-    if (isQueueProcessing) {
-      debug.log('[DEBUG][Session] Queue is currently processing, skipping add operation');
-      return;
-    }
-
     try {
-      debug.log('[DEBUG][Session] Adding track to queue:', {
-        trackUri: track.uri,
-        trackName: track.name,
-        currentQueueLength: queue.length,
-        isInitialQueueSetup,
-        hasInitialTrackLoaded,
-        isQueueProcessing
-      });
-
-      // Check if the track is already in the queue
-      const isAlreadyInQueue = queue.some(q => 
-        (q.uri === track.uri) || 
-        (q.appleMusicId === track.appleMusicId)
-      );
-      
-      if (isAlreadyInQueue) {
-        debug.log('[DEBUG][Session] Track already in queue:', {
-          trackUri: track.uri,
-          trackName: track.name
-        });
-        showQueueNotification(`"${track.name}" is already in the queue`);
-        return;
-      }
-
-      // Format track based on source
+      // Format the track based on its source
       const formattedTrack = {
         ...track,
-        source: track.source || 'spotify',
-        uri: track.source === 'appleMusic' ? track.appleMusicId : track.uri,
-        appleMusicId: track.source === 'appleMusic' ? track.appleMusicId : null,
+        source: track.source || (track.uri?.startsWith('spotify:') ? 'spotify' : 'appleMusic'),
+        uri: track.uri || track.appleMusicId, // Use appleMusicId as URI for Apple Music tracks
         name: track.name || track.title,
-        artists: track.artists || [{ name: track.artist }],
-        album: track.album || { images: [{ url: track.albumArt }] },
-        duration_ms: track.duration_ms || (track.duration * 1000)
+        artists: track.artists || track.artist?.split(',').map(a => ({ name: a.trim() })),
+        album: track.album || { name: track.albumName },
+        duration_ms: track.duration_ms || (track.duration * 1000),
+        albumArt: track.albumArt || track.artwork?.url
       };
 
-      debug.log('[DEBUG][Session] Adding new track to queue', { formattedTrack });
+      debug.log('Adding new track to queue', { formattedTrack });
+
+      // Add to queue service
       await queueService.addToQueue(formattedTrack);
-      showQueueNotification(`Added "${formattedTrack.name}" to session queue`);
+      
+      // Show success notification
+      showQueueNotification(`Added ${formattedTrack.name} to queue`);
     } catch (error) {
-      debug.logError('[DEBUG][Session] Error adding track to queue:', error);
-      showQueueNotification(error.message, 'error');
+      debug.logError(error, 'Error adding track to queue');
+      showQueueNotification('Failed to add track to queue', 'error');
     }
   };
 
