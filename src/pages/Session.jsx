@@ -114,6 +114,7 @@ export default function Session() {
   const [duration, setDuration] = useState(0);
   const [selectedPlaybackDevice, setSelectedPlaybackDevice] = useState(null);
   const [showDeviceMenu, setShowDeviceMenu] = useState(false);
+  const [isQueueSyncing, setIsQueueSyncing] = useState(false);
 
   // Refs
   const audioRef = useRef(null);
@@ -305,9 +306,10 @@ export default function Session() {
   
   // Add the sync function before the queue callback useEffect
   const syncQueueWithSpotify = async (newQueue) => {
-    if (!spotifyPlayerRef.current || !newQueue) return;
+    if (!spotifyPlayerRef.current || !newQueue || isQueueSyncing) return;
     
     try {
+      setIsQueueSyncing(true);
       debug.log('[DEBUG][Session] Syncing queue with Spotify', { queueLength: newQueue.length });
       
       // Get current Spotify state
@@ -375,6 +377,8 @@ export default function Session() {
       debug.log('[DEBUG][Session] Queue sync completed');
     } catch (error) {
       debug.logError('[DEBUG][Session] Error syncing queue with Spotify:', error);
+    } finally {
+      setIsQueueSyncing(false);
     }
   };
 
@@ -388,10 +392,11 @@ export default function Session() {
     queueService.setCallbacks(
       async (updatedQueue) => {
         const now = Date.now();
-        if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL) {
-          debug.log('Queue update rate limited', {
+        if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL || isQueueSyncing) {
+          debug.log('Queue update rate limited or sync in progress', {
             timeSinceLastUpdate: now - lastQueueUpdate,
-            requiredInterval: QUEUE_UPDATE_INTERVAL
+            requiredInterval: QUEUE_UPDATE_INTERVAL,
+            isQueueSyncing
           });
           return;
         }
@@ -407,7 +412,7 @@ export default function Session() {
         setError({ message: errorMessage });
       }
     );
-  }, [queueService.socket, lastQueueUpdate]);
+  }, [queueService.socket, lastQueueUpdate, isQueueSyncing]);
 
   // Add this state for progress update debouncing
   const [lastProgressUpdate, setLastProgressUpdate] = useState(0);
@@ -449,6 +454,14 @@ export default function Session() {
   // Update handleAddToQueue to use the sync function
   const handleAddToQueue = async (track) => {
     try {
+      // Check if the track is already in the queue
+      const isAlreadyInQueue = queue.some(q => q.uri === track.uri);
+      if (isAlreadyInQueue) {
+        debug.log('[DEBUG][Session][queueService] Track already in queue:', track);
+        showQueueNotification(`"${track.name}" is already in the queue`);
+        return;
+      }
+
       debug.log('[DEBUG][Session][queueService] Song added to queue:', track);
       await queueService.addToQueue(track);
       showQueueNotification(`Added "${track.name}" to session queue`);
