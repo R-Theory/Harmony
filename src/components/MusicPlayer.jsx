@@ -229,80 +229,109 @@ const MusicPlayer = ({
   // Handle Apple Music playback
   useEffect(() => {
     if (track?.source === 'appleMusic' && window.MusicKit && appleMusicUserToken) {
+      debug.log('[DEBUG][MusicPlayer] Apple Music track detected:', {
+        trackName: track.name,
+        appleMusicId: track.appleMusicId,
+        isPlaying,
+        volume
+      });
+
       const music = window.MusicKit.getInstance();
       musicKitRef.current = music;
 
       // Pause Spotify if it's playing
       if (spotifyPlayerRef.current) {
+        debug.log('[DEBUG][MusicPlayer] Pausing Spotify before Apple Music playback');
         spotifyPlayerRef.current.pause().catch(error => {
-          debug.logError(error, 'Error pausing Spotify');
+          debug.logError('[DEBUG][MusicPlayer] Error pausing Spotify:', error);
         });
       }
 
-      const playAppleMusicTrack = async () => {
+      const setupAppleMusicPlayback = async () => {
         try {
-          if (track.appleMusicId) {
-            debug.log('Setting Apple Music queue', { track });
-            
-            // Set the queue with the track
-            await music.setQueue({ song: track.appleMusicId });
-            
-            // Set volume
-            music.volume = volume / 100;
-            
-            if (isPlaying) {
-              debug.log('Starting Apple Music playback');
-              await music.play();
-            } else {
-              await music.pause();
-            }
+          debug.log('[DEBUG][MusicPlayer] Setting up Apple Music playback');
+          await music.setQueue({
+            items: [{
+              id: track.appleMusicId,
+              type: 'songs'
+            }]
+          });
+          debug.log('[DEBUG][MusicPlayer] Apple Music queue set successfully');
+
+          music.player.volume = volume / 100;
+          debug.log('[DEBUG][MusicPlayer] Set Apple Music volume:', volume / 100);
+
+          if (isPlaying) {
+            debug.log('[DEBUG][MusicPlayer] Starting Apple Music playback');
+            await music.player.play();
+            debug.log('[DEBUG][MusicPlayer] Apple Music playback started');
+          } else {
+            debug.log('[DEBUG][MusicPlayer] Pausing Apple Music playback');
+            await music.player.pause();
+            debug.log('[DEBUG][MusicPlayer] Apple Music playback paused');
           }
         } catch (error) {
-          debug.logError(error, 'Error playing Apple Music track');
-          setError(error.message);
+          debug.logError('[DEBUG][MusicPlayer] Error in Apple Music playback setup:', error);
         }
       };
 
-      playAppleMusicTrack();
+      setupAppleMusicPlayback();
 
-      // Add playback time observer for progress updates
-      const handlePlaybackTimeDidChange = (event) => {
-        if (onProgressUpdate) {
-          onProgressUpdate(event.currentPlaybackTime * 1000, event.duration * 1000);
-        }
+      // Add event listeners for Apple Music state changes
+      const handlePlaybackStateChange = (event) => {
+        debug.log('[DEBUG][MusicPlayer] Apple Music playback state changed:', {
+          isPlaying: !event.player.paused,
+          currentTime: event.player.currentPlaybackTime,
+          duration: event.player.currentPlaybackDuration
+        });
+        setIsPlaying(!event.player.paused);
       };
 
-      // Add playback state observer
-      const handlePlaybackStateDidChange = (event) => {
-        const newIsPlaying = event.state === 'playing';
-        if (newIsPlaying !== isPlaying) {
-          setIsPlaying(newIsPlaying);
-        }
+      const handleQueueChange = (event) => {
+        debug.log('[DEBUG][MusicPlayer] Apple Music queue changed:', {
+          queueLength: event.queue.length,
+          currentItem: event.queue.currentItem
+        });
       };
 
-      music.addEventListener('playbackTimeDidChange', handlePlaybackTimeDidChange);
-      music.addEventListener('playbackStateDidChange', handlePlaybackStateDidChange);
+      music.addEventListener('playbackStateDidChange', handlePlaybackStateChange);
+      music.addEventListener('queueItemsDidChange', handleQueueChange);
 
-      // Cleanup
       return () => {
-        music.removeEventListener('playbackTimeDidChange', handlePlaybackTimeDidChange);
-        music.removeEventListener('playbackStateDidChange', handlePlaybackStateDidChange);
+        debug.log('[DEBUG][MusicPlayer] Cleaning up Apple Music event listeners');
+        music.removeEventListener('playbackStateDidChange', handlePlaybackStateChange);
+        music.removeEventListener('queueItemsDidChange', handleQueueChange);
       };
     }
-  }, [track, isPlaying, volume, appleMusicUserToken, onProgressUpdate]);
+  }, [track, isPlaying, volume, appleMusicUserToken]);
 
   // Handle Spotify playback
   useEffect(() => {
     if (track?.source === 'spotify' && spotifyPlayerRef.current) {
+      debug.log('[DEBUG][MusicPlayer] Spotify track detected:', {
+        trackName: track.name,
+        uri: track.uri,
+        isPlaying,
+        volume
+      });
+
       // Pause Apple Music if it's playing
       if (musicKitRef.current) {
+        debug.log('[DEBUG][MusicPlayer] Pausing Apple Music before Spotify playback');
         musicKitRef.current.pause().catch(error => {
-          debug.logError(error, 'Error pausing Apple Music');
+          debug.logError('[DEBUG][MusicPlayer] Error pausing Apple Music:', error);
         });
       }
 
-      const playSpotifyTrack = async () => {
+      const setupSpotifyPlayback = async () => {
         try {
+          debug.log('[DEBUG][MusicPlayer] Setting up Spotify playback');
+          await spotifyPlayerRef.current.load(track.uri);
+          debug.log('[DEBUG][MusicPlayer] Spotify track loaded successfully');
+
+          spotifyPlayerRef.current.setVolume(volume / 100);
+          debug.log('[DEBUG][MusicPlayer] Set Spotify volume:', volume / 100);
+
           if (track.uri) {
             debug.log('Setting Spotify queue', { track });
             

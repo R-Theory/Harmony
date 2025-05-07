@@ -97,6 +97,7 @@ const Queue = ({
             duration_ms: song.attributes.durationInMillis,
             source: 'appleMusic',
             appleMusicId: song.id,
+            url: `https://music.apple.com/us/song/${song.id}`
           })));
         } else {
           setSearchResults([]);
