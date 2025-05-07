@@ -115,6 +115,7 @@ export default function Session() {
   const [selectedPlaybackDevice, setSelectedPlaybackDevice] = useState(null);
   const [showDeviceMenu, setShowDeviceMenu] = useState(false);
   const [isQueueSyncing, setIsQueueSyncing] = useState(false);
+  const [isInitialQueueSetup, setIsInitialQueueSetup] = useState(true);
 
   // Refs
   const audioRef = useRef(null);
@@ -304,13 +305,16 @@ export default function Session() {
     };
   }, [peerConnection]);
   
-  // Add the sync function before the queue callback useEffect
+  // Update the syncQueueWithSpotify function
   const syncQueueWithSpotify = async (newQueue) => {
     if (!spotifyPlayerRef.current || !newQueue || isQueueSyncing) return;
     
     try {
       setIsQueueSyncing(true);
-      debug.log('[DEBUG][Session] Syncing queue with Spotify', { queueLength: newQueue.length });
+      debug.log('[DEBUG][Session] Syncing queue with Spotify', { 
+        queueLength: newQueue.length,
+        isInitialQueueSetup 
+      });
       
       // Get current Spotify state
       const state = await spotifyPlayerRef.current.getCurrentState();
@@ -325,7 +329,8 @@ export default function Session() {
         if (currentUri !== mappedTrack.uri) {
           debug.log('[DEBUG][Session] Loading new track', { 
             currentUri, 
-            newUri: mappedTrack.uri 
+            newUri: mappedTrack.uri,
+            isInitialQueueSetup
           });
           
           try {
@@ -336,15 +341,24 @@ export default function Session() {
             
             // Only load if we have a valid player
             if (spotifyPlayerRef.current && typeof spotifyPlayerRef.current.load === 'function') {
-              await spotifyPlayerRef.current.load(mappedTrack.uri);
-              // Wait for load to complete
-              await new Promise(resolve => setTimeout(resolve, 500));
-              // Ensure it's paused
-              await spotifyPlayerRef.current.pause();
+              // For initial queue setup, we want to load and play
+              if (isInitialQueueSetup) {
+                await spotifyPlayerRef.current.load(mappedTrack.uri);
+                // Wait for load to complete
+                await new Promise(resolve => setTimeout(resolve, 500));
+                // Start playing
+                await spotifyPlayerRef.current.resume();
+                setIsPlaying(true);
+              } else {
+                // For subsequent updates, just load and pause
+                await spotifyPlayerRef.current.load(mappedTrack.uri);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                await spotifyPlayerRef.current.pause();
+                setIsPlaying(false);
+              }
               
               // Update our state
               setCurrentTrack(mappedTrack);
-              setIsPlaying(false);
             } else {
               debug.logError('[DEBUG][Session] Invalid Spotify player instance');
             }
@@ -374,6 +388,11 @@ export default function Session() {
         }
       }
       
+      // After first successful sync, mark initial setup as complete
+      if (isInitialQueueSetup) {
+        setIsInitialQueueSetup(false);
+      }
+      
       debug.log('[DEBUG][Session] Queue sync completed');
     } catch (error) {
       debug.logError('[DEBUG][Session] Error syncing queue with Spotify:', error);
@@ -396,7 +415,8 @@ export default function Session() {
           debug.log('Queue update rate limited or sync in progress', {
             timeSinceLastUpdate: now - lastQueueUpdate,
             requiredInterval: QUEUE_UPDATE_INTERVAL,
-            isQueueSyncing
+            isQueueSyncing,
+            isInitialQueueSetup
           });
           return;
         }
@@ -412,7 +432,7 @@ export default function Session() {
         setError({ message: errorMessage });
       }
     );
-  }, [queueService.socket, lastQueueUpdate, isQueueSyncing]);
+  }, [queueService.socket, lastQueueUpdate, isQueueSyncing, isInitialQueueSetup]);
 
   // Add this state for progress update debouncing
   const [lastProgressUpdate, setLastProgressUpdate] = useState(0);
@@ -451,7 +471,7 @@ export default function Session() {
     }
   };
 
-  // Update handleAddToQueue to use the sync function
+  // Update handleAddToQueue to handle initial queue setup
   const handleAddToQueue = async (track) => {
     try {
       // Check if the track is already in the queue
