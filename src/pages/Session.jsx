@@ -445,104 +445,73 @@ export default function Session() {
 
   // Update the handleSkipNext function to include safety checks
   const handleSkipNext = async () => {
-    if (!queue.length) {
-      debug.log('No tracks in queue');
+    if (!sessionQueue || sessionQueue.length === 0) {
+      debug.log('[Session] No tracks in queue to skip to');
       return;
     }
 
-    const nextTrack = queue[0];
-    debug.log('Skipping to next track:', {
-      nextTrack,
-      currentTrack,
-      queueLength: queue.length
-    });
-
     try {
-      // Store current playback state
-      const currentService = currentTrack?.source;
-      const wasPlaying = isPlaying;
+      const nextTrack = sessionQueue[0];
+      debug.log('[Session] Skipping to next track:', nextTrack);
 
-      // Pause current service
-      if (currentService === 'spotify' && spotifyPlayerRef.current) {
-        try {
-          await spotifyPlayerRef.current.pause();
-          debug.log('Spotify paused successfully');
-        } catch (error) {
-          debug.error('Error pausing Spotify:', error);
-        }
-      } else if (currentService === 'appleMusic' && window.MusicKit) {
-        try {
-          const music = window.MusicKit.getInstance();
-          await music.player.pause();
-          debug.log('Apple Music paused successfully');
-        } catch (error) {
-          debug.error('Error pausing Apple Music:', error);
-        }
-      }
-
-      // Remove current track from queue
-      queue.shift();
-      setQueue([...queue]);
-
-      // Setup new service
       if (nextTrack.source === 'spotify') {
-        debug.log('Setting up Spotify playback');
-        if (spotifyPlayerRef.current) {
-          try {
-            // Use the Spotify Web Playback SDK's play method instead of load
-            await spotifyPlayerRef.current.play({
-              uris: [nextTrack.uri]
-            });
-            debug.log('Spotify playback started');
-            setCurrentTrack(nextTrack);
-          } catch (error) {
-            debug.error('Error setting up Spotify playback:', error);
+        if (!spotifyPlayer) {
+          debug.error('[Session] Spotify player not initialized');
+          return;
+        }
+
+        // Stop current playback
+        await spotifyPlayer.pause();
+        
+        // Clear existing queue and add new track
+        await spotifyPlayer.clearQueue();
+        await spotifyPlayer.addToQueue(nextTrack.uri);
+        
+        // Start playback
+        await spotifyPlayer.play();
+        debug.log('[Session] Spotify track playback started');
+      } else if (nextTrack.source === 'appleMusic') {
+        if (!window.MusicKit) {
+          debug.error('[Session] MusicKit not available');
+          return;
+        }
+
+        const music = window.MusicKit.getInstance();
+        
+        // Ensure user is authorized
+        if (!music.isAuthorized) {
+          await authorizeAppleMusic();
+          if (!music.isAuthorized) {
+            throw new Error('Apple Music authorization required');
           }
         }
-      } else if (nextTrack.source === 'appleMusic') {
-        debug.log('Setting up Apple Music playback');
-        if (window.MusicKit) {
-          try {
-            const music = window.MusicKit.getInstance();
-            
-            // Ensure user is authorized
-            if (!music.isAuthorized) {
-              debug.log('Authorizing Apple Music user');
-              await music.authorize();
-            }
 
-            // Clear existing queue first
-            await music.player.stop();
-            
-            // Set up the queue with the track
-            await music.setQueue({
-              items: [{
-                id: nextTrack.appleMusicId,
-                type: 'songs'
-              }]
-            });
+        // Stop current playback and clear queue
+        await music.player.stop();
+        
+        // Set up new track
+        await music.setQueue({
+          items: [{
+            id: nextTrack.appleMusicId,
+            type: 'songs'
+          }]
+        });
 
-            // Start playback if it was playing before
-            if (wasPlaying) {
-              await music.player.play();
-              debug.log('Apple Music playback started');
-            } else {
-              debug.log('Apple Music track loaded but not playing');
-            }
-
-            // Update current track state with proper URL
-            setCurrentTrack({
-              ...nextTrack,
-              url: `https://music.apple.com/us/song/${nextTrack.appleMusicId}`
-            });
-          } catch (error) {
-            debug.error('Error setting up Apple Music playback:', error);
-            showQueueNotification('Failed to play Apple Music track', 'error');
-          }
+        // Start playback if it was playing before
+        if (isPlaying) {
+          await music.player.play();
+          debug.log('[Session] Apple Music track playback started');
+        } else {
+          debug.log('[Session] Apple Music track loaded but not playing');
         }
       }
-    } catch (error) {
-      debug.error('Error in handleSkipNext:', error);
+
+      // Update current track state
+      setCurrentTrack(nextTrack);
+      debug.log('[Session] Current track updated:', nextTrack);
+    } catch (err) {
+      debug.error('[Session] Error skipping to next track:', err);
+      showQueueNotification('Failed to skip to next track', 'error');
     }
   };
 
@@ -801,159 +770,88 @@ export default function Session() {
     }
   }, [spotifyReady]);
 
-  const initializeSpotifyPlayer = (token) => {
+  const initializeSpotifyPlayer = async (accessToken) => {
+    if (!accessToken) {
+      debug.error('[Session] No access token available for Spotify');
+      return;
+    }
+
     try {
-      if (!window.Spotify) {
-        throw new Error('Spotify SDK not loaded');
+      debug.log('[Session] Initializing Spotify player');
+      
+      // Create new player instance
+      const player = new window.Spotify.Player({
+        name: 'Harmony Player',
+        getOAuthToken: cb => cb(accessToken),
+        volume: 0.5
+      });
+
+      // Error handling
+      player.addListener('initialization_error', ({ message }) => {
+        debug.error('[Spotify] Initialization error:', message);
+        showQueueNotification('Failed to initialize Spotify player', 'error');
+      });
+
+      player.addListener('authentication_error', ({ message }) => {
+        debug.error('[Spotify] Authentication error:', message);
+        showQueueNotification('Spotify authentication failed', 'error');
+      });
+
+      player.addListener('account_error', ({ message }) => {
+        debug.error('[Spotify] Account error:', message);
+        showQueueNotification('Spotify account error', 'error');
+      });
+
+      player.addListener('playback_error', ({ message }) => {
+        debug.error('[Spotify] Playback error:', message);
+        showQueueNotification('Spotify playback error', 'error');
+      });
+
+      // Playback status updates
+      player.addListener('player_state_changed', state => {
+        if (!state) return;
+        
+        debug.log('[Spotify] Player state changed:', {
+          isPlaying: !state.paused,
+          currentTrack: state.track_window?.current_track
+        });
+
+        setIsPlaying(!state.paused);
+        
+        if (state.track_window?.current_track) {
+          setCurrentTrack({
+            id: state.track_window.current_track.id,
+            uri: state.track_window.current_track.uri,
+            name: state.track_window.current_track.name,
+            artist: state.track_window.current_track.artists[0].name,
+            source: 'spotify'
+          });
+        }
+      });
+
+      // Ready
+      player.addListener('ready', ({ device_id }) => {
+        debug.log('[Spotify] Player ready with device ID:', device_id);
+        setSpotifyDeviceId(device_id);
+        setSpotifyPlayer(player);
+      });
+
+      // Not Ready
+      player.addListener('not_ready', ({ device_id }) => {
+        debug.log('[Spotify] Player not ready:', device_id);
+        setSpotifyPlayer(null);
+      });
+
+      // Connect to the player
+      const connected = await player.connect();
+      if (!connected) {
+        throw new Error('Failed to connect to Spotify player');
       }
 
-      spotifyPlayer = new window.Spotify.Player({
-        name: 'Harmony Web Player',
-        getOAuthToken: cb => { cb(token); },
-        volume: 0.8,
-        enableMediaSession: true
-      });
-
-      spotifyPlayer.addListener('ready', ({ device_id }) => {
-        debug.log('[Spotify SDK] Player ready with device_id', device_id);
-        spotifyPlayerRef.current = spotifyPlayer;
-        setSpotifyDeviceId(device_id);
-        
-        // Transfer playback to this device
-        makeSpotifyApiCall('/v1/me/player', {
-          method: 'PUT',
-          body: JSON.stringify({ device_ids: [device_id], play: false })
-        }).catch(error => {
-          if (error.message.includes('404')) {
-            debug.log('[Spotify] Cloud Playback API endpoint not found - this is expected');
-          } else {
-            debug.logError('[Spotify] Error transferring playback:', error);
-          }
-        });
-      });
-
-      // Handle Cloud Playback API errors
-      spotifyPlayer.addListener('initialization_error', e => {
-        if (e.message.includes('404') || e.message.includes('CloudPlaybackClientError')) {
-          debug.log('[Spotify] Cloud Playback API error - this is expected:', e);
-        } else {
-          debug.logError('[Spotify SDK] Init error', e);
-        }
-      });
-
-      spotifyPlayer.addListener('authentication_error', e => {
-        debug.logError('[Spotify SDK] Auth error', e);
-        // Try to refresh the token
-        const refreshToken = localStorage.getItem('spotify_refresh_token');
-        if (refreshToken) {
-          makeSpotifyApiCall('/api/refresh_token', {
-            method: 'POST',
-            body: JSON.stringify({ refresh_token: refreshToken })
-          })
-            .then(data => {
-              if (data.access_token) {
-                localStorage.setItem('spotify_access_token', data.access_token);
-                localStorage.setItem('spotify_token_expiry', (Date.now() + 3600000).toString());
-                spotifyPlayer.connect();
-              }
-            })
-            .catch(error => debug.logError('[Spotify] Error refreshing token:', error));
-        }
-      });
-
-      spotifyPlayer.addListener('account_error', e => debug.logError('[Spotify SDK] Account error', e));
-      spotifyPlayer.addListener('playback_error', e => {
-        debug.logError('[Spotify SDK] Playback error', e);
-        // If we get a 404, try to refresh the token
-        if (e.message?.includes('404')) {
-          const accessToken = localStorage.getItem('spotify_access_token');
-          if (accessToken) {
-            debug.log('[Spotify] Refreshing token due to 404 error');
-            localStorage.removeItem('spotify_access_token');
-            window.location.reload();
-          }
-        }
-      });
-      
-      // Helper function to convert ms to seconds
-      const msToSeconds = (ms) => Math.floor(ms / 1000);
-
-      // Update the player state change handler
-      spotifyPlayer.addListener('player_state_changed', async state => {
-        if (state) {
-          debug.log('[Spotify SDK] Player state changed:', state);
-          
-          // Handle track changes
-          if (state.track_window.current_track) {
-            const newTrack = {
-              ...state.track_window.current_track,
-              title: state.track_window.current_track.name,
-              artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
-              albumArt: state.track_window.current_track.album?.images?.[0]?.url,
-              source: 'spotify',
-              uri: state.track_window.current_track.uri,
-              duration: Math.floor(state.track_window.current_track.duration_ms / 1000)
-            };
-            
-            // Only update track if it's different
-            if (!currentTrack || currentTrack.uri !== newTrack.uri) {
-              debug.log('[Spotify] Track changed:', {
-                from: currentTrack?.name,
-                to: newTrack.name
-              });
-              setCurrentTrack(newTrack);
-            }
-            
-            const now = Date.now();
-            const timeUntilEnd = state.duration - state.position;
-            
-            // Update progress
-            if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
-              setProgress(msToSeconds(state.position));
-              setDuration(Math.floor(state.duration / 1000));
-              setLastProgressUpdate(now);
-            }
-            
-            // Sync with Spotify if needed
-            if (state.paused || timeUntilEnd < TRACK_END_THRESHOLD) {
-              try {
-                const spotifyState = await spotifyPlayerRef.current.getCurrentState();
-                if (spotifyState && spotifyState.track_window.current_track) {
-                  const spotifyPosition = msToSeconds(spotifyState.position);
-                  const currentPosition = msToSeconds(state.position);
-                  
-                  if (Math.abs(spotifyPosition - currentPosition) > 1) {
-                    debug.log('[Spotify] Syncing progress:', {
-                      current: currentPosition,
-                      spotify: spotifyPosition
-                    });
-                    setProgress(spotifyPosition);
-                  }
-                }
-              } catch (error) {
-                debug.logError('[Spotify] Error syncing progress:', error);
-              }
-            }
-            
-            // Update playing state
-            if (state.paused !== !isPlaying) {
-              setIsPlaying(!state.paused);
-            }
-          } else {
-            // No track playing
-            setCurrentTrack(null);
-            setIsPlaying(false);
-          }
-        } else {
-          // No state
-          setCurrentTrack(null);
-          setIsPlaying(false);
-        }
-      });
-
-      spotifyPlayer.connect();
-    } catch (error) {
-      debug.logError('[Spotify] Error initializing player:', error);
+      debug.log('[Session] Spotify player initialized successfully');
+    } catch (err) {
+      debug.error('[Session] Error initializing Spotify player:', err);
+      showQueueNotification('Failed to initialize Spotify player', 'error');
     }
   };
 
@@ -973,7 +871,7 @@ export default function Session() {
           }
         });
         setAppleMusicReady(true);
-        console.log('[MusicKit] Script loaded and configured');
+        debug.log('[MusicKit] Script loaded and configured');
       };
     } else {
       setAppleMusicReady(true);
@@ -982,9 +880,22 @@ export default function Session() {
 
   // Function to authorize user with Apple Music
   const authorizeAppleMusic = async () => {
-    if (!window.MusicKit) return;
-    const music = window.MusicKit.getInstance();
+    if (!window.MusicKit) {
+      debug.error('[MusicKit] MusicKit not available');
+      return;
+    }
+
     try {
+      const music = window.MusicKit.getInstance();
+      
+      // Check if already authorized
+      if (music.isAuthorized) {
+        debug.log('[MusicKit] Already authorized');
+        setAppleMusicUserToken(music.musicUserToken);
+        return;
+      }
+
+      debug.log('[MusicKit] Starting authorization');
       const userToken = await music.authorize();
       
       // Check if user has an active subscription
@@ -994,11 +905,13 @@ export default function Session() {
       }
       
       setAppleMusicUserToken(userToken);
-      console.log('[MusicKit] User authorized, token:', userToken);
+      debug.log('[MusicKit] User authorized successfully');
     } catch (err) {
-      console.error('[MusicKit] Authorization failed:', err);
+      debug.error('[MusicKit] Authorization failed:', err);
       if (err.message === 'Apple Music subscription required') {
         showQueueNotification('Apple Music subscription required to play tracks', 'error');
+      } else {
+        showQueueNotification('Failed to connect to Apple Music', 'error');
       }
     }
   };
