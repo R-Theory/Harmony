@@ -845,16 +845,14 @@ export default function Session() {
           } else {
             // If no track, ensure we're not playing
             setCurrentTrack(null);
-            setProgress(0);
-            setDuration(0);
             setIsPlaying(false);
+            // Don't reset progress here as it might be a temporary state
           }
         } else {
           // If no state, ensure we're not playing
           setCurrentTrack(null);
-          setProgress(0);
-          setDuration(0);
           setIsPlaying(false);
+          // Don't reset progress here as it might be a temporary state
         }
       });
 
