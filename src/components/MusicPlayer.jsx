@@ -339,17 +339,24 @@ const MusicPlayer = ({
         });
       }
 
-      if (track.appleMusicId) {
-        music.setQueue({ song: track.appleMusicId }).then(() => {
-          if (isPlaying) music.play();
-        });
-      }
-      if (isPlaying) {
-        music.play();
-      } else {
-        music.pause();
-      }
-      music.volume = volume / 100;
+      const playAppleMusicTrack = async () => {
+        try {
+          if (track.appleMusicId) {
+            debug.log('Setting Apple Music queue', { track });
+            await music.setQueue({ song: track.appleMusicId });
+            
+            if (isPlaying) {
+              debug.log('Starting Apple Music playback');
+              await music.play();
+            }
+          }
+        } catch (error) {
+          debug.logError(error, 'Error playing Apple Music track');
+          setError(error.message);
+        }
+      };
+
+      playAppleMusicTrack();
 
       // Add playback time observer for progress updates
       const handlePlaybackTimeDidChange = (event) => {

@@ -498,9 +498,21 @@ export default function Session() {
         return;
       }
 
-      debug.log('[DEBUG][Session] Adding new track to queue');
-      await queueService.addToQueue(track);
-      showQueueNotification(`Added "${track.name}" to session queue`);
+      // Format track based on source
+      const formattedTrack = {
+        ...track,
+        source: track.source || 'spotify',
+        uri: track.uri || track.appleMusicId,
+        appleMusicId: track.appleMusicId || track.uri,
+        name: track.name || track.title,
+        artists: track.artists || [{ name: track.artist }],
+        album: track.album || { images: [{ url: track.albumArt }] },
+        duration_ms: track.duration_ms || (track.duration * 1000)
+      };
+
+      debug.log('[DEBUG][Session] Adding new track to queue', { formattedTrack });
+      await queueService.addToQueue(formattedTrack);
+      showQueueNotification(`Added "${formattedTrack.name}" to session queue`);
     } catch (error) {
       debug.logError('[DEBUG][Session] Error adding track to queue:', error);
       showQueueNotification(error.message, 'error');
