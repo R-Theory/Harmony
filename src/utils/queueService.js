@@ -429,7 +429,12 @@ class QueueService {
       
       // If this is the first track in our queue, handle it specially
       if (queue.length === 1) {
-        console.log('Spotify: Handling first track in queue');
+        console.log('Spotify: Handling first track in queue', {
+          trackUri: queue[0].uri,
+          trackName: queue[0].name,
+          currentSpotifyQueue: spotifyQueue.map(t => ({ uri: t.uri, name: t.name }))
+        });
+
         try {
           // Only check if it's the current track
           const isTrackCurrent = spotifyQueue[0]?.uri === queue[0].uri;
@@ -441,19 +446,16 @@ class QueueService {
             
             // Wait a moment for Spotify to process the change
             await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Verify the sync once
+            const { queue: newSpotifyQueue } = await getQueue(accessToken);
+            const syncSuccess = await this.verifyQueueSync(queue, newSpotifyQueue);
+            
+            if (!syncSuccess) {
+              console.log('Spotify: Queue verification failed, but not retrying to prevent duplicates');
+            }
           } else {
             console.log('Spotify: Track is current track, skipping add');
-          }
-          
-          // Verify the sync
-          const { queue: newSpotifyQueue } = await getQueue(accessToken);
-          const syncSuccess = await this.verifyQueueSync(queue, newSpotifyQueue);
-          
-          if (!syncSuccess) {
-            console.log('Spotify: Queue verification failed, retrying sync...');
-            // If verification failed, try one more time
-            await spotifyAddToQueue(queue[0].uri, accessToken);
-            await new Promise(resolve => setTimeout(resolve, 1000));
           }
           return;
         } catch (error) {
