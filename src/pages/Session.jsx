@@ -127,7 +127,13 @@ export default function Session() {
   const QUEUE_UPDATE_INTERVAL = 3000; // 3 seconds between queue updates
   const PROGRESS_UPDATE_INTERVAL = 1000; // 1 second between progress updates
   const PROGRESS_SYNC_THRESHOLD = 2000; // 2 seconds difference threshold for syncing
-  const TRACK_END_THRESHOLD = 5000; // 5 seconds before end to check if track is actually ending
+  const TRACK_END_THRESHOLD = 1000; // 1 second before end to check if track is actually ending
+  const MID_TRACK_SYNC_THRESHOLD = 0.5; // Sync when track is halfway through
+  const SYNC_CHECK_INTERVAL = 30000; // Check sync every 30 seconds
+
+  // State for progress tracking
+  const [lastProgressUpdate, setLastProgressUpdate] = useState(0);
+  const [lastSyncCheck, setLastSyncCheck] = useState(0);
 
   // Generate or get a userId for this device
   const [userId] = useState(() => {
@@ -430,9 +436,6 @@ export default function Session() {
       }
     );
   }, [queueService.socket, lastQueueUpdate, isQueueSyncing, isQueueProcessing, isInitialQueueSetup, hasInitialTrackLoaded]);
-
-  // Add this state for progress update debouncing
-  const [lastProgressUpdate, setLastProgressUpdate] = useState(0);
 
   // Update the handleSkipNext function to include safety checks
   const handleSkipNext = async () => {
@@ -788,26 +791,46 @@ export default function Session() {
               setCurrentTrack(currentTrack);
             }
             
-            // Check if we're near the end of the track
+            const now = Date.now();
             const timeUntilEnd = state.duration - state.position;
-            if (timeUntilEnd < TRACK_END_THRESHOLD) {
-              // Double check with Spotify if the track is actually ending
+            const trackProgress = state.position / state.duration;
+
+            // Check if we need to sync progress
+            const shouldSyncProgress = 
+              // Track is paused
+              state.paused ||
+              // Near the end of the track
+              timeUntilEnd < TRACK_END_THRESHOLD ||
+              // Halfway through the track
+              (trackProgress > MID_TRACK_SYNC_THRESHOLD && trackProgress < MID_TRACK_SYNC_THRESHOLD + 0.1) ||
+              // Regular sync check interval
+              now - lastSyncCheck > SYNC_CHECK_INTERVAL;
+
+            if (shouldSyncProgress) {
               try {
                 const spotifyState = await spotifyPlayerRef.current.getCurrentState();
                 if (spotifyState && spotifyState.track_window.current_track) {
                   const spotifyTimeUntilEnd = spotifyState.duration - spotifyState.position;
-                  // Only update progress if we're significantly out of sync
-                  if (Math.abs(spotifyTimeUntilEnd - timeUntilEnd) > PROGRESS_SYNC_THRESHOLD) {
+                  const timeDifference = Math.abs(spotifyTimeUntilEnd - timeUntilEnd);
+
+                  // If the difference is significant or track is paused, update our progress
+                  if (timeDifference > PROGRESS_SYNC_THRESHOLD || state.paused) {
+                    debug.log('[Spotify] Syncing progress with Spotify:', {
+                      localPosition: state.position,
+                      spotifyPosition: spotifyState.position,
+                      difference: timeDifference,
+                      isPaused: state.paused
+                    });
                     setProgress(spotifyState.position);
                     setDuration(spotifyState.duration);
+                    setLastSyncCheck(now);
                   }
                 }
               } catch (error) {
-                debug.logError('[Spotify] Error checking track end state:', error);
+                debug.logError('[Spotify] Error checking track progress:', error);
               }
             } else {
               // Normal progress update with debouncing
-              const now = Date.now();
               if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
                 setProgress(state.position);
                 setDuration(state.duration);
