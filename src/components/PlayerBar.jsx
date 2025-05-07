@@ -95,23 +95,6 @@ const PlayerBar = ({
     onVolumeChange(newValue);
   };
 
-  // Update progress bar smoothly
-  useEffect(() => {
-    if (!isPlaying || !currentTrack) {
-      setLocalProgress(0);
-      return;
-    }
-    
-    const interval = setInterval(() => {
-      setLocalProgress(prev => {
-        const newProgress = prev + 1000; // Update every second
-        return newProgress <= duration ? newProgress : duration;
-      });
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, [isPlaying, currentTrack, duration]);
-
   // Ensure isPlaying is false when there's no track
   useEffect(() => {
     if (!currentTrack && isPlaying) {
