@@ -331,6 +331,14 @@ const MusicPlayer = ({
     if (track?.source === 'appleMusic' && window.MusicKit && appleMusicUserToken) {
       const music = window.MusicKit.getInstance();
       musicKitRef.current = music;
+
+      // Pause Spotify if it's playing
+      if (spotifyPlayerRef.current) {
+        spotifyPlayerRef.current.pause().catch(error => {
+          debug.logError(error, 'Error pausing Spotify');
+        });
+      }
+
       if (track.appleMusicId) {
         music.setQueue({ song: track.appleMusicId }).then(() => {
           if (isPlaying) music.play();

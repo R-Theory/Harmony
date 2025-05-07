@@ -880,10 +880,20 @@ export default function Session() {
     const music = window.MusicKit.getInstance();
     try {
       const userToken = await music.authorize();
+      
+      // Check if user has an active subscription
+      const subscription = await music.api.me();
+      if (!subscription || !subscription.attributes?.canPlay) {
+        throw new Error('Apple Music subscription required');
+      }
+      
       setAppleMusicUserToken(userToken);
       console.log('[MusicKit] User authorized, token:', userToken);
     } catch (err) {
       console.error('[MusicKit] Authorization failed:', err);
+      if (err.message === 'Apple Music subscription required') {
+        showQueueNotification('Apple Music subscription required to play tracks', 'error');
+      }
     }
   };
 
