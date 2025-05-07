@@ -121,6 +121,9 @@ export default function Session() {
 
   // Constants
   const QUEUE_UPDATE_INTERVAL = 3000; // 3 seconds between queue updates
+  const PROGRESS_UPDATE_INTERVAL = 1000; // 1 second between progress updates
+  const PROGRESS_SYNC_THRESHOLD = 2000; // 2 seconds difference threshold for syncing
+  const TRACK_END_THRESHOLD = 5000; // 5 seconds before end to check if track is actually ending
 
   // Generate or get a userId for this device
   const [userId] = useState(() => {
@@ -406,7 +409,10 @@ export default function Session() {
     );
   }, [queueService.socket, lastQueueUpdate]);
 
-  // Update handleSkipNext to use the sync function
+  // Add this state for progress update debouncing
+  const [lastProgressUpdate, setLastProgressUpdate] = useState(0);
+
+  // Update the handleSkipNext function to include safety checks
   const handleSkipNext = async () => {
     if (!queue || queue.length <= 1) return;
     
@@ -418,6 +424,17 @@ export default function Session() {
     try {
       // Get the next track
       const nextTrack = queue[1];
+      
+      // Double check with Spotify if the current track is actually ending
+      if (spotifyPlayerRef.current) {
+        const state = await spotifyPlayerRef.current.getCurrentState();
+        if (state && state.track_window.current_track) {
+          const timeUntilEnd = state.duration - state.position;
+          if (timeUntilEnd > TRACK_END_THRESHOLD) {
+            debug.log('Track not actually ending, skipping manually');
+          }
+        }
+      }
       
       // Update the queue in the service
       await queueService.removeFromQueue(queue[0]);
@@ -702,8 +719,8 @@ export default function Session() {
         }
       });
       
-      // Add playback state listeners
-      spotifyPlayer.addListener('player_state_changed', state => {
+      // Update the player state change handler
+      spotifyPlayer.addListener('player_state_changed', async state => {
         if (state) {
           debug.log('[Spotify SDK] Player state changed:', state);
           // Only update isPlaying if we have a track
@@ -718,17 +735,36 @@ export default function Session() {
               duration: state.track_window.current_track.duration_ms
             };
             
-            // Only update state if there are meaningful changes
+            // Only update track if it's different
             if (JSON.stringify(currentTrack) !== JSON.stringify(currentTrack)) {
               setCurrentTrack(currentTrack);
             }
             
-            // Update progress and duration only if they've changed significantly (> 100ms)
-            if (Math.abs(state.position - progress) > 100) {
-              setProgress(state.position);
-            }
-            if (Math.abs(state.duration - duration) > 100) {
-              setDuration(state.duration);
+            // Check if we're near the end of the track
+            const timeUntilEnd = state.duration - state.position;
+            if (timeUntilEnd < TRACK_END_THRESHOLD) {
+              // Double check with Spotify if the track is actually ending
+              try {
+                const spotifyState = await spotifyPlayerRef.current.getCurrentState();
+                if (spotifyState && spotifyState.track_window.current_track) {
+                  const spotifyTimeUntilEnd = spotifyState.duration - spotifyState.position;
+                  // Only update progress if we're significantly out of sync
+                  if (Math.abs(spotifyTimeUntilEnd - timeUntilEnd) > PROGRESS_SYNC_THRESHOLD) {
+                    setProgress(spotifyState.position);
+                    setDuration(spotifyState.duration);
+                  }
+                }
+              } catch (error) {
+                debug.logError('[Spotify] Error checking track end state:', error);
+              }
+            } else {
+              // Normal progress update with debouncing
+              const now = Date.now();
+              if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
+                setProgress(state.position);
+                setDuration(state.duration);
+                setLastProgressUpdate(now);
+              }
             }
             
             // Only update isPlaying if it's different
