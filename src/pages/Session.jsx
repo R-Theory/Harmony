@@ -308,139 +308,76 @@ export default function Session() {
   }, [peerConnection]);
   
   // Update the syncQueueWithSpotify function
-  const syncQueueWithSpotify = async (newQueue) => {
-    if (!spotifyPlayerRef.current || !newQueue || isQueueSyncing || isQueueProcessing) {
-      debug.log('[DEBUG][Session] Skipping queue sync:', {
-        hasPlayer: !!spotifyPlayerRef.current,
-        hasQueue: !!newQueue,
-        isQueueSyncing,
-        isQueueProcessing,
-        queueLength: newQueue?.length
-      });
+  const syncQueueWithSpotify = async (queue) => {
+    if (!queue || queue.length === 0) return;
+
+    // Prevent multiple syncs from happening at once
+    if (isQueueSyncing) {
+      console.log('[DEBUG][Session] Queue sync already in progress, skipping');
       return;
     }
-    
+
+    // Check if we're syncing too frequently
+    const now = Date.now();
+    if (now - lastQueueUpdate < QUEUE_UPDATE_INTERVAL) {
+      console.log('[DEBUG][Session] Queue sync too soon, skipping');
+      return;
+    }
+
+    if (!spotifyPlayerRef.current) {
+      console.error('[DEBUG][Session] Invalid Spotify player instance');
+      return;
+    }
+
+    setIsQueueSyncing(true);
+    setLastQueueUpdate(now);
+
     try {
-      setIsQueueSyncing(true);
-      setIsQueueProcessing(true);
-      debug.log('[DEBUG][Session] Starting queue sync', { 
-        queueLength: newQueue.length,
-        isInitialQueueSetup,
-        hasInitialTrackLoaded,
-        queueContents: newQueue.map(t => ({ uri: t.uri, name: t.name }))
-      });
-      
       // Get current Spotify state
       const state = await spotifyPlayerRef.current.getCurrentState();
       const currentUri = state?.track_window?.current_track?.uri;
-      
-      debug.log('[DEBUG][Session] Current Spotify state:', {
-        currentUri,
-        state: state ? {
-          paused: state.paused,
-          duration: state.duration,
-          position: state.position,
-          currentTrack: state.track_window?.current_track?.name
-        } : null
-      });
-      
-      // If we have a queue, ensure the first track is loaded
-      if (newQueue.length > 0) {
-        const firstTrack = newQueue[0];
-        const mappedTrack = normalizeSpotifyTrack(firstTrack);
-        
-        debug.log('[DEBUG][Session] Processing first track:', {
-          firstTrackUri: mappedTrack.uri,
-          firstTrackName: mappedTrack.name,
+      console.log('[DEBUG][Session] Current Spotify state:', { currentUri, state });
+
+      // If this is the first track in our queue, handle it specially
+      if (queue.length === 1) {
+        const firstTrack = queue[0];
+        const shouldLoad = currentUri !== firstTrack.uri;
+        console.log('[DEBUG][Session] Processing first track:', {
+          firstTrackUri: firstTrack.uri,
+          firstTrackName: firstTrack.name,
           currentUri,
-          shouldLoad: currentUri !== mappedTrack.uri
+          shouldLoad
         });
-        
-        // If the current track is different from what we want, load the new track
-        if (currentUri !== mappedTrack.uri) {
-          debug.log('[DEBUG][Session] Loading new track', { 
-            currentUri, 
-            newUri: mappedTrack.uri,
+
+        if (shouldLoad) {
+          console.log('[DEBUG][Session] Loading new track', {
+            currentUri,
+            newUri: firstTrack.uri,
             isInitialQueueSetup,
             hasInitialTrackLoaded,
-            trackName: mappedTrack.name
+            trackName: firstTrack.name
           });
-          
-          try {
-            // Pause current playback
-            debug.log('[DEBUG][Session] Pausing current playback');
-            await spotifyPlayerRef.current.pause();
-            // Wait for pause to take effect
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Only load if we have a valid player
-            if (spotifyPlayerRef.current && typeof spotifyPlayerRef.current.load === 'function') {
-              // For initial queue setup, we want to load and play
-              if (isInitialQueueSetup && !hasInitialTrackLoaded) {
-                debug.log('[DEBUG][Session] Initial track setup - loading and playing');
-                await spotifyPlayerRef.current.load(mappedTrack.uri);
-                // Wait for load to complete
-                await new Promise(resolve => setTimeout(resolve, 500));
-                // Start playing
-                await spotifyPlayerRef.current.resume();
-                setIsPlaying(true);
-                setHasInitialTrackLoaded(true);
-                debug.log('[DEBUG][Session] Initial track loaded and playing');
-              } else {
-                debug.log('[DEBUG][Session] Subsequent update - loading and pausing');
-                await spotifyPlayerRef.current.load(mappedTrack.uri);
-                await new Promise(resolve => setTimeout(resolve, 500));
-                await spotifyPlayerRef.current.pause();
-                setIsPlaying(false);
-                debug.log('[DEBUG][Session] Track loaded and paused');
-              }
-              
-              // Update our state
-              setCurrentTrack(mappedTrack);
-              debug.log('[DEBUG][Session] Current track state updated');
-            } else {
-              debug.logError('[DEBUG][Session] Invalid Spotify player instance');
-            }
-          } catch (error) {
-            debug.logError('[DEBUG][Session] Error loading track:', error);
-            // If we get a 404, try to refresh the token
-            if (error.message?.includes('404')) {
-              const accessToken = localStorage.getItem('spotify_access_token');
-              if (accessToken) {
-                debug.log('[DEBUG][Session] Refreshing Spotify token due to 404 error');
-                localStorage.removeItem('spotify_access_token');
-                window.location.reload();
-                return;
-              }
-            }
+
+          // Store current playback state
+          const wasPlaying = !state?.paused;
+
+          // Load and play the new track
+          await spotifyPlayerRef.current.load(firstTrack.uri);
+          if (wasPlaying) {
+            await spotifyPlayerRef.current.resume();
           }
-        } else {
-          debug.log('[DEBUG][Session] Track already loaded, skipping load operation');
-        }
-      } else {
-        // If queue is empty, clear the current track
-        if (currentUri) {
-          debug.log('[DEBUG][Session] Clearing current track - empty queue');
-          await spotifyPlayerRef.current.pause();
-          setCurrentTrack(null);
-          setIsPlaying(false);
-          setProgress(0);
-          setDuration(0);
+
+          // Update state
+          setHasInitialTrackLoaded(true);
+          setIsInitialQueueSetup(false);
         }
       }
-      
-      // After first successful sync, mark initial setup as complete
-      if (isInitialQueueSetup) {
-        debug.log('[DEBUG][Session] Marking initial setup as complete');
-        setIsInitialQueueSetup(false);
-      }
-      
-      debug.log('[DEBUG][Session] Queue sync completed successfully');
+
+      console.log('[DEBUG][Session] Queue sync completed successfully');
     } catch (error) {
-      debug.logError('[DEBUG][Session] Error syncing queue with Spotify:', error);
+      console.error('[DEBUG][Session] Error syncing queue:', error);
     } finally {
       setIsQueueSyncing(false);
-      setIsQueueProcessing(false);
     }
   };
 
