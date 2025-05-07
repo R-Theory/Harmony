@@ -329,17 +329,16 @@ class QueueService {
       // Get current Spotify queue
       const { queue: spotifyQueue } = await getQueue(accessToken);
       
-      // First, clear any tracks from Spotify's queue that aren't in our queue
-      for (const spotifyTrack of spotifyQueue) {
-        if (!queue.some(track => track.uri === spotifyTrack.uri)) {
+      // If this is the first track in our queue, clear Spotify's queue first
+      if (queue.length === 1 && spotifyQueue.length > 0) {
+        console.log('Spotify: Clearing queue before adding first track');
+        // Skip through all tracks in the queue to clear it
+        for (let i = 0; i < spotifyQueue.length; i++) {
           try {
             await skipToNext(accessToken);
-            console.log('Spotify: Removed track from queue:', spotifyTrack.name);
-            // Add a small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 100)); // Rate limiting
           } catch (error) {
-            console.error('Spotify: Error removing track from queue:', error);
-            // If we get a 404, try to refresh the token
+            console.error('Spotify: Error clearing queue:', error);
             if (error.message?.includes('404')) {
               localStorage.removeItem('spotify_access_token');
               window.location.reload();
@@ -349,17 +348,40 @@ class QueueService {
         }
       }
 
-      // Then, add any tracks from our queue that aren't in Spotify's queue
+      // Create a map of URIs for faster lookup
+      const spotifyUriMap = new Map(spotifyQueue.map(track => [track.uri, track]));
+      const sessionUriMap = new Map(queue.map(track => [track.uri, track]));
+
+      // First, check if we need to add any tracks from our queue to Spotify's queue
       for (const track of queue) {
-        if (track.source === 'spotify' && !spotifyQueue.some(qt => qt.uri === track.uri)) {
+        if (track.source === 'spotify' && !spotifyUriMap.has(track.uri)) {
           try {
             await spotifyAddToQueue(track.uri, accessToken);
-            console.log('Spotify: Synced track to queue:', track.name);
+            console.log('Spotify: Added track to queue:', track.name);
             // Add a small delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 100));
           } catch (error) {
-            console.error('Spotify: Error syncing track:', error);
-            // If we get a 404, try to refresh the token
+            console.error('Spotify: Error adding track to queue:', error);
+            if (error.message?.includes('404')) {
+              localStorage.removeItem('spotify_access_token');
+              window.location.reload();
+              return;
+            }
+          }
+        }
+      }
+
+      // Then, check if we need to remove any tracks from Spotify's queue
+      // Only remove tracks that are not in our queue and are not currently playing
+      for (const spotifyTrack of spotifyQueue) {
+        if (!sessionUriMap.has(spotifyTrack.uri) && !spotifyTrack.is_playing) {
+          try {
+            await skipToNext(accessToken);
+            console.log('Spotify: Removed track from queue:', spotifyTrack.name);
+            // Add a small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error) {
+            console.error('Spotify: Error removing track from queue:', error);
             if (error.message?.includes('404')) {
               localStorage.removeItem('spotify_access_token');
               window.location.reload();
@@ -370,7 +392,6 @@ class QueueService {
       }
     } catch (error) {
       console.error('Spotify: Error syncing queue:', error);
-      // If we get a 404, try to refresh the token
       if (error.message?.includes('404')) {
         localStorage.removeItem('spotify_access_token');
         window.location.reload();
