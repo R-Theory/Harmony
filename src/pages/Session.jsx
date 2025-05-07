@@ -367,11 +367,10 @@ export default function Session() {
           // Store current playback state
           const wasPlaying = !state?.paused;
 
-          // Load and play the new track
-          await spotifyPlayerRef.current.load(firstTrack.uri);
-          if (wasPlaying) {
-            await spotifyPlayerRef.current.resume();
-          }
+          // Play the new track
+          await spotifyPlayerRef.current.play({
+            uris: [firstTrack.uri]
+          });
 
           // Update state
           setHasInitialTrackLoaded(true);
@@ -777,79 +776,72 @@ export default function Session() {
       spotifyPlayer.addListener('player_state_changed', async state => {
         if (state) {
           debug.log('[Spotify SDK] Player state changed:', state);
-          // Only update isPlaying if we have a track
+          
+          // Handle track changes
           if (state.track_window.current_track) {
-            const currentTrack = {
+            const newTrack = {
               ...state.track_window.current_track,
               title: state.track_window.current_track.name,
               artist: state.track_window.current_track.artists.map(a => a.name).join(', '),
               albumArt: state.track_window.current_track.album?.images?.[0]?.url,
               source: 'spotify',
               uri: state.track_window.current_track.uri,
-              duration: Math.floor(state.track_window.current_track.duration_ms / 1000) // Convert to seconds
+              duration: Math.floor(state.track_window.current_track.duration_ms / 1000)
             };
             
             // Only update track if it's different
-            if (JSON.stringify(currentTrack) !== JSON.stringify(currentTrack)) {
-              setCurrentTrack(currentTrack);
+            if (!currentTrack || currentTrack.uri !== newTrack.uri) {
+              debug.log('[Spotify] Track changed:', {
+                from: currentTrack?.name,
+                to: newTrack.name
+              });
+              setCurrentTrack(newTrack);
             }
             
             const now = Date.now();
             const timeUntilEnd = state.duration - state.position;
-            const trackProgress = state.position / state.duration;
-
-            // Check if we need to sync progress
-            const shouldSyncProgress = 
-              state.paused ||
-              timeUntilEnd < TRACK_END_THRESHOLD ||
-              (trackProgress > MID_TRACK_SYNC_THRESHOLD && trackProgress < MID_TRACK_SYNC_THRESHOLD + 0.1) ||
-              now - lastSyncCheck > SYNC_CHECK_INTERVAL;
-
-            if (shouldSyncProgress) {
+            
+            // Update progress
+            if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
+              setProgress(msToSeconds(state.position));
+              setDuration(Math.floor(state.duration / 1000));
+              setLastProgressUpdate(now);
+            }
+            
+            // Sync with Spotify if needed
+            if (state.paused || timeUntilEnd < TRACK_END_THRESHOLD) {
               try {
                 const spotifyState = await spotifyPlayerRef.current.getCurrentState();
                 if (spotifyState && spotifyState.track_window.current_track) {
-                  const spotifyTimeUntilEnd = spotifyState.duration - spotifyState.position;
-                  const timeDifference = Math.abs(spotifyTimeUntilEnd - timeUntilEnd);
-
-                  if (timeDifference > PROGRESS_SYNC_THRESHOLD || state.paused) {
-                    debug.log('[Spotify] Syncing progress with Spotify:', {
-                      localPosition: msToSeconds(state.position),
-                      spotifyPosition: msToSeconds(spotifyState.position),
-                      difference: msToSeconds(timeDifference),
-                      isPaused: state.paused
+                  const spotifyPosition = msToSeconds(spotifyState.position);
+                  const currentPosition = msToSeconds(state.position);
+                  
+                  if (Math.abs(spotifyPosition - currentPosition) > 1) {
+                    debug.log('[Spotify] Syncing progress:', {
+                      current: currentPosition,
+                      spotify: spotifyPosition
                     });
-                    setProgress(msToSeconds(spotifyState.position));
-                    setDuration(Math.floor(spotifyState.duration / 1000)); // Convert to seconds
-                    setLastSyncCheck(now);
+                    setProgress(spotifyPosition);
                   }
                 }
               } catch (error) {
-                debug.logError('[Spotify] Error checking track progress:', error);
-              }
-            } else {
-              if (now - lastProgressUpdate > PROGRESS_UPDATE_INTERVAL) {
-                setProgress(msToSeconds(state.position));
-                setDuration(Math.floor(state.duration / 1000)); // Convert to seconds
-                setLastProgressUpdate(now);
+                debug.logError('[Spotify] Error syncing progress:', error);
               }
             }
             
-            // Only update isPlaying if it's different
+            // Update playing state
             if (state.paused !== !isPlaying) {
               setIsPlaying(!state.paused);
             }
           } else {
-            // If no track, ensure we're not playing
+            // No track playing
             setCurrentTrack(null);
             setIsPlaying(false);
-            // Don't reset progress here as it might be a temporary state
           }
         } else {
-          // If no state, ensure we're not playing
+          // No state
           setCurrentTrack(null);
           setIsPlaying(false);
-          // Don't reset progress here as it might be a temporary state
         }
       });
 
