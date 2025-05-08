@@ -108,6 +108,7 @@ export default function Session() {
   const [isDeviceDialogOpen, setIsDeviceDialogOpen] = useState(false);
   const [spotifyReady, setSpotifyReady] = useState(false);
   const [spotifyDeviceId, setSpotifyDeviceId] = useState(null);
+  const [spotifyPlayer, setSpotifyPlayer] = useState(null);
   const [appleMusicUserToken, setAppleMusicUserToken] = useState(null);
   const [appleMusicReady, setAppleMusicReady] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -445,70 +446,81 @@ export default function Session() {
 
   // Update the handleSkipNext function to include safety checks
   const handleSkipNext = async () => {
-    if (!sessionQueue || sessionQueue.length === 0) {
-      debug.log('[Session] No tracks in queue to skip to');
-      return;
-    }
-
     try {
-      const nextTrack = sessionQueue[0];
+      if (!queueService.current?.queue || queueService.current.queue.length === 0) {
+        debug.log('[Session] No tracks in queue to skip to');
+        return;
+      }
+
+      const currentIndex = queueService.current.queue.findIndex(track => 
+        track.uri === currentTrack?.uri
+      );
+      
+      if (currentIndex === -1 || currentIndex >= queueService.current.queue.length - 1) {
+        debug.log('[Session] No next track available');
+        return;
+      }
+
+      const nextTrack = queueService.current.queue[currentIndex + 1];
       debug.log('[Session] Skipping to next track:', nextTrack);
 
+      // Stop current playback
+      if (currentTrack?.source === 'spotify' && spotifyPlayerRef.current) {
+        await spotifyPlayerRef.current.pause();
+      } else if (currentTrack?.source === 'appleMusic' && window.MusicKit) {
+        const music = window.MusicKit.getInstance();
+        if (music) {
+          await music.player.stop();
+        }
+      }
+
+      // Start new playback
       if (nextTrack.source === 'spotify') {
-        if (!spotifyPlayer) {
-          debug.error('[Session] Spotify player not initialized');
-          return;
+        if (!spotifyPlayerRef.current) {
+          throw new Error('Spotify player not initialized');
         }
 
-        // Stop current playback
-        await spotifyPlayer.pause();
-        
         // Clear existing queue and add new track
-        await spotifyPlayer.clearQueue();
-        await spotifyPlayer.addToQueue(nextTrack.uri);
+        await spotifyPlayerRef.current.clearQueue();
+        await spotifyPlayerRef.current.addToQueue(nextTrack.uri);
         
         // Start playback
-        await spotifyPlayer.play();
-        debug.log('[Session] Spotify track playback started');
+        await spotifyPlayerRef.current.resume();
+        debug.log('[Session] Started Spotify playback of:', nextTrack.name);
       } else if (nextTrack.source === 'appleMusic') {
         if (!window.MusicKit) {
-          debug.error('[Session] MusicKit not available');
-          return;
+          throw new Error('Apple Music not initialized');
         }
 
         const music = window.MusicKit.getInstance();
-        
-        // Ensure user is authorized
-        if (!music.isAuthorized) {
-          await authorizeAppleMusic();
-          if (!music.isAuthorized) {
-            throw new Error('Apple Music authorization required');
-          }
+        if (!music) {
+          throw new Error('Apple Music instance not available');
         }
 
-        // Stop current playback and clear queue
-        await music.player.stop();
-        
-        // Set up new track
-        await music.setQueue({
-          items: [{
-            id: nextTrack.appleMusicId,
-            type: 'songs'
-          }]
-        });
+        // Ensure user is authorized
+        if (!music.isAuthorized) {
+          await music.authorize();
+        }
 
+        // Clear existing queue and set new track
+        await music.player.stop();
+        await music.setQueue({ songs: [nextTrack.uri] });
+        
         // Start playback if it was playing before
         if (isPlaying) {
           await music.player.play();
-          debug.log('[Session] Apple Music track playback started');
+          debug.log('[Session] Started Apple Music playback of:', nextTrack.name);
         } else {
-          debug.log('[Session] Apple Music track loaded but not playing');
+          debug.log('[Session] Loaded Apple Music track:', nextTrack.name);
         }
       }
 
       // Update current track state
-      setCurrentTrack(nextTrack);
-      debug.log('[Session] Current track updated:', nextTrack);
+      setCurrentTrack({
+        ...nextTrack,
+        source: nextTrack.source
+      });
+
     } catch (err) {
       debug.error('[Session] Error skipping to next track:', err);
       showQueueNotification('Failed to skip to next track', 'error');
@@ -834,12 +846,14 @@ export default function Session() {
         debug.log('[Spotify] Player ready with device ID:', device_id);
         setSpotifyDeviceId(device_id);
         setSpotifyPlayer(player);
+        spotifyPlayerRef.current = player;
       });
 
       // Not Ready
       player.addListener('not_ready', ({ device_id }) => {
         debug.log('[Spotify] Player not ready:', device_id);
         setSpotifyPlayer(null);
+        spotifyPlayerRef.current = null;
       });
 
       // Connect to the player
