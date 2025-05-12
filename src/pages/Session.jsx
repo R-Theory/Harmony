@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Box,
@@ -125,6 +125,8 @@ export default function Session() {
   const [isInitialQueueSetup, setIsInitialQueueSetup] = useState(true);
   const [hasInitialTrackLoaded, setHasInitialTrackLoaded] = useState(false);
   const [isQueueProcessing, setIsQueueProcessing] = useState(false);
+  const [spotifyToken, setSpotifyToken] = useState(null);
+  const [spotifyError, setSpotifyError] = useState(null);
 
   // Refs
   const audioRef = useRef(null);
@@ -771,120 +773,69 @@ export default function Session() {
   }, []);
 
   // Initialize Spotify Player when ready
-  useEffect(() => {
-    const token = localStorage.getItem('spotify_access_token');
-    if (token && !spotifyPlayerRef.current && spotifyReady && window.Spotify) {
-      debug.log('Initializing Spotify player');
-      initializeSpotifyPlayer(token);
-    }
-  }, [spotifyReady]);
-
-  // Handle Spotify SDK ready state
-  useEffect(() => {
-    if (window.Spotify) {
-      setSpotifyReady(true);
-    }
-  }, []);
-
-  const initializeSpotifyPlayer = async (accessToken) => {
-    if (!accessToken) {
-      debug.error('[Session] No access token available for Spotify');
+  const initializeSpotifyPlayer = useCallback(async () => {
+    if (!spotifyToken || !spotifyReady) {
+      console.log('[Session] Cannot initialize Spotify player - missing token or SDK not ready');
       return;
     }
 
     try {
-      debug.log('[Session] Initializing Spotify player', {
-        token: accessToken.substring(0, 10) + '...',
-        spotifyReady,
-        hasSpotifySDK: !!window.Spotify
-      });
+      console.log('[Session] Initializing Spotify player with token:', spotifyToken.substring(0, 10) + '...');
       
-      // Create new player instance
       const player = new window.Spotify.Player({
-        name: 'Harmony Player',
-        getOAuthToken: cb => {
-          debug.log('[Session] Getting OAuth token for Spotify player');
-          cb(accessToken);
-        },
+        name: 'Harmony Web Player',
+        getOAuthToken: cb => cb(spotifyToken),
         volume: 0.5
       });
 
       // Error handling
       player.addListener('initialization_error', ({ message }) => {
-        debug.error('[Spotify] Initialization error:', {
-          message,
-          timestamp: new Date().toISOString()
-        });
-        showQueueNotification('Failed to initialize Spotify player', 'error');
+        console.error('[Session] Spotify initialization error:', message);
+        setSpotifyError(message);
+        setSpotifyToken(null);
+        localStorage.removeItem('spotifyToken');
       });
 
       player.addListener('authentication_error', ({ message }) => {
-        debug.error('[Spotify] Authentication error:', {
-          message,
-          timestamp: new Date().toISOString()
-        });
-        showQueueNotification('Spotify authentication failed', 'error');
-        // Clear invalid token
-        localStorage.removeItem('spotify_access_token');
+        console.error('[Session] Spotify authentication error:', message);
+        setSpotifyError(message);
+        setSpotifyToken(null);
+        localStorage.removeItem('spotifyToken');
       });
 
       player.addListener('account_error', ({ message }) => {
-        debug.error('[Spotify] Account error:', {
-          message,
-          timestamp: new Date().toISOString()
-        });
-        showQueueNotification('Spotify account error', 'error');
+        console.error('[Session] Spotify account error:', message);
+        setSpotifyError(message);
       });
 
       player.addListener('playback_error', ({ message }) => {
-        debug.error('[Spotify] Playback error:', {
-          message,
-          timestamp: new Date().toISOString()
-        });
-        showQueueNotification('Spotify playback error', 'error');
+        console.error('[Session] Spotify playback error:', message);
+        setSpotifyError(message);
       });
 
       // Playback status updates
       player.addListener('player_state_changed', state => {
-        if (!state) {
-          debug.log('[Spotify] Player state is null');
-          return;
-        }
-        
-        debug.log('[Spotify] Player state changed:', {
-          isPlaying: !state.paused,
-          currentTrack: state.track_window?.current_track,
-          position: state.position,
-          duration: state.duration,
-          timestamp: new Date().toISOString()
+        console.log('[Session] Spotify player state changed:', {
+          timestamp: new Date().toISOString(),
+          isPlaying: state?.is_playing,
+          currentTrack: state?.track_window?.current_track,
+          position: state?.position
         });
-
-        setIsPlaying(!state.paused);
-        
-        if (state.track_window?.current_track) {
-          setCurrentTrack({
-            id: state.track_window.current_track.id,
-            uri: state.track_window.current_track.uri,
-            name: state.track_window.current_track.name,
-            artist: state.track_window.current_track.artists[0].name,
-            source: 'spotify'
-          });
-        }
+        setCurrentTrack(state?.track_window?.current_track);
       });
 
       // Ready
       player.addListener('ready', async ({ device_id }) => {
-        debug.log('[Spotify] Player ready:', {
-          device_id,
-          timestamp: new Date().toISOString()
-        });
-
+        console.log('[Session] Spotify player ready with device ID:', device_id);
+        setSpotifyDeviceId(device_id);
+        setSpotifyError(null);
+        
+        // Activate the device
         try {
-          // Activate the device
           const response = await fetch('https://api.spotify.com/v1/me/player', {
             method: 'PUT',
             headers: {
-              'Authorization': `Bearer ${accessToken}`,
+              'Authorization': `Bearer ${spotifyToken}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -894,53 +845,40 @@ export default function Session() {
           });
 
           if (!response.ok) {
-            throw new Error(`Failed to activate device: ${response.statusText}`);
+            const error = await response.json();
+            console.error('[Session] Failed to activate Spotify device:', error);
+            throw new Error(error.error?.message || 'Failed to activate device');
           }
 
-          debug.log('[Spotify] Device activated successfully');
-          
-          setSpotifyDeviceId(device_id);
-          setSpotifyPlayer(player);
-          spotifyPlayerRef.current = player;
-          // Set the device ID in the queue service
-          queueService.spotifyDeviceId = device_id;
-          queueService.spotifyToken = accessToken;
+          console.log('[Session] Successfully activated Spotify device');
         } catch (error) {
-          debug.error('[Spotify] Failed to activate device:', error);
-          showQueueNotification('Failed to activate Spotify device', 'error');
+          console.error('[Session] Error activating Spotify device:', error);
+          setSpotifyError(error.message);
         }
       });
 
       // Not Ready
       player.addListener('not_ready', ({ device_id }) => {
-        debug.log('[Spotify] Player not ready:', {
-          device_id,
-          timestamp: new Date().toISOString()
-        });
-        setSpotifyPlayer(null);
-        spotifyPlayerRef.current = null;
-        queueService.spotifyDeviceId = null;
-        queueService.spotifyToken = null;
+        console.log('[Session] Spotify player not ready:', device_id);
+        setSpotifyError('Player not ready');
       });
 
       // Connect to the player
-      debug.log('[Session] Connecting to Spotify player');
       const connected = await player.connect();
-      
+      console.log('[Session] Spotify player connected:', connected);
+
       if (!connected) {
-        debug.error('[Session] Failed to connect to Spotify player');
         throw new Error('Failed to connect to Spotify player');
       }
 
-      debug.log('[Session] Spotify player initialized successfully');
-    } catch (err) {
-      debug.error('[Session] Error initializing Spotify player:', {
-        error: err,
-        timestamp: new Date().toISOString()
-      });
-      showQueueNotification('Failed to initialize Spotify player', 'error');
+      setSpotifyPlayer(player);
+    } catch (error) {
+      console.error('[Session] Error initializing Spotify player:', error);
+      setSpotifyError(error.message);
+      setSpotifyToken(null);
+      localStorage.removeItem('spotifyToken');
     }
-  };
+  }, [spotifyToken, spotifyReady]);
 
   // Load and initialize MusicKit JS
   useEffect(() => {
