@@ -41,7 +41,7 @@ export default function PlayerContainer({
     try {
       const player = spotifyPlayerRef?.current;
       if (!player) {
-        debug.logError('[PlayerContainer] No Spotify player instance found');
+        debug.log('[PlayerContainer] No Spotify player instance found');
         throw new Error('No Spotify player instance');
       }
 
@@ -64,7 +64,7 @@ export default function PlayerContainer({
       setIsPlaying(!isPlaying);
       debug.log('[PlayerContainer] UI state updated', { newIsPlaying: !isPlaying });
     } catch (error) {
-      debug.logError('[PlayerContainer] Error in play/pause:', error);
+      debug.log('[PlayerContainer] Error in play/pause:', error);
       // If we get a 404, try to refresh the token
       if (error.message?.includes('404')) {
         const accessToken = localStorage.getItem('spotify_access_token');

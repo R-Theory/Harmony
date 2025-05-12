@@ -13,6 +13,9 @@ class QueueService {
     this.SYNC_COOLDOWN = 2000; // 2 seconds between syncs
     this.lastQueueState = null; // Track the last known queue state
     this.debug = new DebugLogger('QueueService');
+    this.queue = [];
+    this.spotifyDeviceId = null;
+    this.spotifyToken = null;
   }
 
   connect(sessionId) {
@@ -433,70 +436,91 @@ class QueueService {
   }
 
   async addToQueue(track) {
-    if (!this.socket || !this.sessionId) {
-      throw new Error('Not connected to a session');
-    }
-    if (!this.isConnected) {
-      throw new Error('Socket connection is not active');
-    }
-
-    this.debug.log('Adding track to queue:', {
-      trackName: track.name,
-      trackUri: track.uri,
-      sessionId: this.sessionId,
-      source: track.source
-    });
-
     try {
-      // Add to appropriate service queue
+      this.debug.log('[QueueService] Adding track to queue:', track);
+
+      // Add to local queue first
+      this.queue.push(track);
+      this.emit('queue-update', { queue: this.queue });
+
+      // Add to Spotify queue if it's a Spotify track
       if (track.source === 'spotify') {
-        const accessToken = localStorage.getItem('spotify_access_token');
-        if (accessToken) {
-          try {
-            // Check if track is already in queue before adding
-            const { queue: currentQueue } = await getQueue(accessToken);
-            const isAlreadyInQueue = currentQueue.some(qTrack => qTrack.uri === track.uri);
-            
-            if (!isAlreadyInQueue) {
-              await spotifyAddToQueue(track.uri, accessToken);
-              this.debug.log('Track added to Spotify queue');
-            } else {
-              this.debug.log('Track already in Spotify queue, skipping');
-            }
-          } catch (spotifyError) {
-            this.debug.error('Error adding to Spotify queue:', spotifyError);
-            // Continue with app-managed queue even if Spotify queue fails
+        try {
+          // Ensure we have a valid device ID
+          if (!this.spotifyDeviceId) {
+            throw new Error('No Spotify device ID available');
           }
-        }
-      } else if (track.source === 'appleMusic') {
-        if (window.MusicKit) {
-          try {
-            const music = window.MusicKit.getInstance();
-            if (!music.isAuthorized) {
-              await music.authorize();
-            }
-            await music.setQueue({
-              items: [{
-                id: track.appleMusicId,
-                type: 'songs'
-              }]
-            });
-            this.debug.log('Track added to Apple Music queue');
-          } catch (appleMusicError) {
-            this.debug.error('Error adding to Apple Music queue:', appleMusicError);
-            // Continue with app-managed queue even if Apple Music queue fails
-          }
+
+          // Transfer playback to our device first
+          await this.transferPlayback();
+          
+          // Add to queue
+          await this.addToSpotifyQueue(track.uri);
+          this.debug.log('[QueueService] Track added to Spotify queue');
+        } catch (error) {
+          this.debug.error('[QueueService] Error adding to Spotify queue:', error);
+          // Don't throw here - we still want to keep the track in our local queue
         }
       }
 
-      // Add to app-managed queue
+      // Add to Apple Music queue if it's an Apple Music track
+      if (track.source === 'appleMusic') {
+        try {
+          await this.addToAppleMusicQueue(track);
+          this.debug.log('[QueueService] Track added to Apple Music queue');
+        } catch (error) {
+          this.debug.error('[QueueService] Error adding to Apple Music queue:', error);
+          // Don't throw here - we still want to keep the track in our local queue
+        }
+      }
+
+      // Emit add-to-queue event to server
       this.socket.emit('add-to-queue', {
-        sessionId: this.sessionId,
-        track
+        track,
+        sessionId: this.sessionId
       });
-      this.debug.log('Emitted add-to-queue event to server');
+
+      return true;
     } catch (error) {
-      this.debug.error('Error adding to queue:', error);
+      this.debug.error('[QueueService] ERROR:', error);
+      throw error;
+    }
+  }
+
+  async transferPlayback() {
+    try {
+      if (!this.spotifyDeviceId) {
+        throw new Error('No Spotify device ID available');
+      }
+
+      // First check if we need to transfer playback
+      const currentPlayback = await this.getCurrentPlayback();
+      if (currentPlayback?.device?.id === this.spotifyDeviceId) {
+        this.debug.log('[QueueService] Already playing on correct device');
+        return;
+      }
+
+      // Transfer playback to our device
+      const response = await fetch('https://api.spotify.com/v1/me/player', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.spotifyToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          device_ids: [this.spotifyDeviceId],
+          play: false
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`Failed to transfer playback: ${error.error?.message || response.statusText}`);
+      }
+
+      this.debug.log('[QueueService] Successfully transferred playback');
+    } catch (error) {
+      this.debug.error('[QueueService] Error transferring playback:', error);
       throw error;
     }
   }
