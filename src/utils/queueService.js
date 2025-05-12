@@ -679,81 +679,67 @@ class QueueService {
         }
       }
 
-      // Check subscription status using the correct method
+      // Check if we have a valid track ID
+      if (!track.appleMusicId) {
+        this.debug.error('[QueueService] Invalid Apple Music track ID');
+        throw new Error('Invalid Apple Music track ID');
+      }
+
+      // Get current queue state
+      const currentQueue = music.player.queue.items;
+      this.debug.log('[QueueService] Current Apple Music queue state:', {
+        queueLength: currentQueue.length,
+        currentTrack: music.player.nowPlayingItem
+      });
+
+      // Add track to queue
       try {
-        const userToken = music.musicUserToken;
-        if (!userToken) {
-          this.debug.error('[QueueService] No Apple Music user token available');
-          throw new Error('Apple Music authorization required');
+        // First check if the track is playable
+        const catalogTrack = await music.api.song(track.appleMusicId);
+        if (!catalogTrack || !catalogTrack.attributes?.playParams) {
+          throw new Error('Track is not playable');
         }
 
-        // Check if we can play music
-        if (!music.player) {
-          this.debug.error('[QueueService] MusicKit player not initialized');
-          throw new Error('Apple Music player not initialized');
-        }
-
-        // Check if we have a valid track ID
-        if (!track.appleMusicId) {
-          this.debug.error('[QueueService] Invalid Apple Music track ID');
-          throw new Error('Invalid Apple Music track ID');
-        }
-
-        // Get current queue state
-        const currentQueue = music.player.queue.items;
-        this.debug.log('[QueueService] Current Apple Music queue state:', {
-          queueLength: currentQueue.length,
-          currentTrack: music.player.nowPlayingItem
+        // Add to queue
+        await music.player.queue.prepend({
+          items: [{
+            id: track.appleMusicId,
+            type: 'songs'
+          }]
         });
 
-        // Add track to queue
-        try {
-          // First check if the track is playable
-          const catalogTrack = await music.api.song(track.appleMusicId);
-          if (!catalogTrack || !catalogTrack.attributes?.playParams) {
-            throw new Error('Track is not playable');
-          }
-
-          await music.player.queue.prepend({
-            items: [{
-              id: track.appleMusicId,
-              type: 'songs'
-            }]
-          });
-
-          // Verify track was added
-          const newQueue = music.player.queue.items;
-          const trackAdded = newQueue.some(item => item.id === track.appleMusicId);
-          
-          if (!trackAdded) {
-            this.debug.error('[QueueService] Failed to verify track addition to queue');
-            throw new Error('Failed to add track to Apple Music queue');
-          }
-
-          this.debug.log('[QueueService] Track successfully added to Apple Music queue:', {
-            trackName: track.name,
-            newQueueLength: newQueue.length
-          });
-
-          // Start playback if not already playing
-          if (!music.player.isPlaying) {
-            this.debug.log('[QueueService] Starting Apple Music playback');
-            try {
-              await music.player.play();
-            } catch (playError) {
-              this.debug.error('[QueueService] Failed to start playback:', playError?.message || 'Unknown error');
-              // Don't throw here - the track is still in the queue
-            }
-          }
-
-        } catch (queueError) {
-          this.debug.error('[QueueService] Error adding to Apple Music queue:', queueError?.message || 'Unknown error');
+        // Verify track was added
+        const newQueue = music.player.queue.items;
+        const trackAdded = newQueue.some(item => item.id === track.appleMusicId);
+        
+        if (!trackAdded) {
+          this.debug.error('[QueueService] Failed to verify track addition to queue');
           throw new Error('Failed to add track to Apple Music queue');
         }
 
-      } catch (error) {
-        this.debug.error('[QueueService] Error in addToAppleMusicQueue:', error?.message || 'Unknown error');
-        throw error;
+        this.debug.log('[QueueService] Track successfully added to Apple Music queue:', {
+          trackName: track.name,
+          newQueueLength: newQueue.length
+        });
+
+        // Start playback if not already playing
+        if (!music.player.isPlaying) {
+          this.debug.log('[QueueService] Starting Apple Music playback');
+          try {
+            // Ensure we have playback capability
+            if (!music.player.canPlay) {
+              throw new Error('Playback not available - subscription may be required');
+            }
+            await music.player.play();
+          } catch (playError) {
+            this.debug.error('[QueueService] Failed to start playback:', playError?.message || 'Unknown error');
+            // Don't throw here - the track is still in the queue
+          }
+        }
+
+      } catch (queueError) {
+        this.debug.error('[QueueService] Error adding to Apple Music queue:', queueError?.message || 'Unknown error');
+        throw new Error('Failed to add track to Apple Music queue');
       }
 
     } catch (error) {
