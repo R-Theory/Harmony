@@ -679,11 +679,17 @@ class QueueService {
         }
       }
 
-      // Check subscription status
+      // Check subscription status using the correct method
       try {
-        const subscription = await music.api.me();
-        if (!subscription || !subscription.attributes?.canPlay) {
-          this.debug.error('[QueueService] No active Apple Music subscription');
+        const userToken = music.musicUserToken;
+        if (!userToken) {
+          this.debug.error('[QueueService] No Apple Music user token available');
+          throw new Error('Apple Music authorization required');
+        }
+
+        // Check if we can play music
+        if (!music.player.canPlay) {
+          this.debug.error('[QueueService] Cannot play music - subscription may be required');
           throw new Error('Apple Music subscription required');
         }
       } catch (subError) {
