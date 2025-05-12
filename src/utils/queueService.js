@@ -766,8 +766,13 @@ class QueueService {
             isPlaying: music.player.isPlaying
           });
 
-          if (!music.player.canPlay) {
-            throw new Error('Playback not available - subscription may be required');
+          // Wait for MusicKit to be ready
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Check if we need to reauthorize
+          if (!music.isAuthorized) {
+            this.debug.log('[QueueService] Reauthorizing Apple Music');
+            await music.authorize();
           }
 
           // Set up playback state change listener
@@ -802,7 +807,17 @@ class QueueService {
             playbackState: music.player.playbackState,
             isPlaying: music.player.isPlaying
           });
-          throw new Error('Failed to start Apple Music playback');
+
+          // Try to reauthorize and retry playback
+          try {
+            this.debug.log('[QueueService] Attempting to reauthorize and retry playback');
+            await music.authorize();
+            await music.player.play();
+            this.debug.log('[QueueService] Playback started after reauthorization');
+          } catch (retryError) {
+            this.debug.error('[QueueService] Failed to start playback after retry:', retryError);
+            throw new Error('Failed to start Apple Music playback after retry');
+          }
         }
 
       } catch (queueError) {
