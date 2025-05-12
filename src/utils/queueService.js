@@ -704,7 +704,11 @@ class QueueService {
         queueLength: currentQueue.length,
         currentTrack: music.player.nowPlayingItem,
         isPlaying: music.player.isPlaying,
-        playbackState: music.player.playbackState
+        playbackState: music.player.playbackState,
+        queueItems: currentQueue.map(item => ({
+          id: item.id,
+          type: item.type
+        }))
       });
 
       // Add track to queue
@@ -729,10 +733,21 @@ class QueueService {
           this.debug.log('[QueueService] Current playback stopped');
         }
 
-        // Clear existing queue and set new track
-        this.debug.log('[QueueService] Setting new queue with track:', track.appleMusicId);
+        // Get the current queue items
+        const existingQueueItems = music.player.queue.items.map(item => ({
+          id: item.id,
+          type: 'songs'
+        }));
+
+        // Add the new track to the queue
+        this.debug.log('[QueueService] Adding track to existing queue:', {
+          newTrackId: track.appleMusicId,
+          existingQueueLength: existingQueueItems.length
+        });
+
+        // Set the queue with all items
         await music.setQueue({
-          items: [{
+          items: [...existingQueueItems, {
             id: track.appleMusicId,
             type: 'songs'
           }]
@@ -756,66 +771,65 @@ class QueueService {
           throw new Error('Failed to add track to Apple Music queue');
         }
 
-        // Start playback
-        this.debug.log('[QueueService] Preparing to start playback');
-        try {
-          // Wait for MusicKit to be ready
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          // Check if we need to reauthorize
-          if (!music.isAuthorized) {
-            this.debug.log('[QueueService] Reauthorizing Apple Music');
-            await music.authorize();
-          }
-
-          // Set up playback state change listener
-          music.addEventListener('playbackStateDidChange', (event) => {
-            this.debug.log('[QueueService] Apple Music playback state changed:', {
-              isPlaying: !event.player.paused,
-              currentTrack: event.player.nowPlayingItem,
-              playbackState: event.player.playbackState,
-              timestamp: new Date().toISOString()
-            });
-          });
-
-          // Initialize playback
-          this.debug.log('[QueueService] Initializing playback');
-          await music.player.prepareToPlay();
-          
-          // Start playback
-          this.debug.log('[QueueService] Starting playback');
-          await music.player.play();
-          
-          // Verify playback started
-          setTimeout(() => {
-            this.debug.log('[QueueService] Playback status after start:', {
-              isPlaying: music.player.isPlaying,
-              currentTrack: music.player.nowPlayingItem,
-              playbackState: music.player.playbackState,
-              timestamp: new Date().toISOString()
-            });
-          }, 1000);
-
-          this.debug.log('[QueueService] Apple Music playback started successfully');
-        } catch (playError) {
-          this.debug.error('[QueueService] Failed to start playback:', {
-            error: playError?.message || 'Unknown error',
-            stack: playError?.stack,
-            playbackState: music.player.playbackState,
-            isPlaying: music.player.isPlaying
-          });
-
-          // Try to reauthorize and retry playback
+        // Start playback if this is the first track
+        if (newQueue.length === 1) {
+          this.debug.log('[QueueService] This is the first track, starting playback');
           try {
-            this.debug.log('[QueueService] Attempting to reauthorize and retry playback');
-            await music.authorize();
-            await music.player.prepareToPlay();
+            // Wait for MusicKit to be ready
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Check if we need to reauthorize
+            if (!music.isAuthorized) {
+              this.debug.log('[QueueService] Reauthorizing Apple Music');
+              await music.authorize();
+            }
+
+            // Set up playback state change listener
+            music.addEventListener('playbackStateDidChange', (event) => {
+              this.debug.log('[QueueService] Apple Music playback state changed:', {
+                isPlaying: !event.player.paused,
+                currentTrack: event.player.nowPlayingItem,
+                playbackState: event.player.playbackState,
+                timestamp: new Date().toISOString()
+              });
+            });
+
+            // Initialize playback
+            this.debug.log('[QueueService] Initializing playback');
             await music.player.play();
-            this.debug.log('[QueueService] Playback started after reauthorization');
-          } catch (retryError) {
-            this.debug.error('[QueueService] Failed to start playback after retry:', retryError);
-            throw new Error('Failed to start Apple Music playback after retry');
+            
+            // Verify playback started
+            setTimeout(() => {
+              this.debug.log('[QueueService] Playback status after start:', {
+                isPlaying: music.player.isPlaying,
+                currentTrack: music.player.nowPlayingItem,
+                playbackState: music.player.playbackState,
+                timestamp: new Date().toISOString()
+              });
+            }, 1000);
+
+            this.debug.log('[QueueService] Apple Music playback started successfully');
+          } catch (playError) {
+            this.debug.error('[QueueService] Failed to start playback:', {
+              error: playError?.message || 'Unknown error',
+              stack: playError?.stack,
+              playbackState: music.player.playbackState,
+              isPlaying: music.player.isPlaying
+            });
+
+            // Try to reauthorize and retry playback
+            try {
+              this.debug.log('[QueueService] Attempting to reauthorize and retry playback');
+              await music.authorize();
+              await music.player.play();
+              this.debug.log('[QueueService] Playback started after reauthorization');
+            } catch (retryError) {
+              this.debug.error('[QueueService] Failed to start playback after retry:', retryError);
+              throw new Error('Failed to start Apple Music playback after retry');
+            }
           }
+        } else {
+          this.debug.log('[QueueService] Track added to queue, no playback needed');
         }
 
       } catch (queueError) {
