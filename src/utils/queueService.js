@@ -494,8 +494,14 @@ class QueueService {
   async getCurrentPlayback() {
     try {
       if (!this.spotifyToken) {
+        this.debug.error('[QueueService] No Spotify token available');
         throw new Error('No Spotify token available');
       }
+
+      this.debug.log('[QueueService] Getting current playback state', {
+        token: this.spotifyToken.substring(0, 10) + '...',
+        deviceId: this.spotifyDeviceId
+      });
 
       const response = await fetch('https://api.spotify.com/v1/me/player', {
         headers: {
@@ -503,15 +509,53 @@ class QueueService {
         }
       });
 
+      this.debug.log('[QueueService] Spotify API response status:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
       if (!response.ok) {
         if (response.status === 204) {
-          // No active device
+          this.debug.log('[QueueService] No active device');
           return null;
         }
+        if (response.status === 401) {
+          this.debug.error('[QueueService] Token expired or invalid');
+          throw new Error('Token expired or invalid');
+        }
+        const errorText = await response.text();
+        this.debug.error('[QueueService] Spotify API error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
         throw new Error(`Failed to get playback state: ${response.statusText}`);
       }
 
-      return await response.json();
+      const responseText = await response.text();
+      this.debug.log('[QueueService] Raw API response:', responseText);
+
+      if (!responseText) {
+        this.debug.log('[QueueService] Empty response from Spotify API');
+        return null;
+      }
+
+      try {
+        const data = JSON.parse(responseText);
+        this.debug.log('[QueueService] Parsed playback state:', {
+          device: data.device,
+          isPlaying: !data.is_playing,
+          currentTrack: data.item
+        });
+        return data;
+      } catch (parseError) {
+        this.debug.error('[QueueService] Failed to parse Spotify API response:', {
+          error: parseError,
+          responseText
+        });
+        throw new Error('Invalid JSON response from Spotify API');
+      }
     } catch (error) {
       this.debug.error('[QueueService] Error getting current playback:', error);
       throw error;
@@ -610,7 +654,14 @@ class QueueService {
 
   async addToAppleMusicQueue(track) {
     try {
+      this.debug.log('[QueueService] Adding track to Apple Music queue:', {
+        trackId: track.appleMusicId,
+        trackName: track.name,
+        trackSource: track.source
+      });
+
       if (!window.MusicKit) {
+        this.debug.error('[QueueService] MusicKit not available');
         throw new Error('MusicKit not available');
       }
 
@@ -618,20 +669,65 @@ class QueueService {
       
       // Ensure user is authorized
       if (!music.isAuthorized) {
-        await music.authorize();
+        this.debug.log('[QueueService] Authorizing Apple Music user');
+        try {
+          await music.authorize();
+          this.debug.log('[QueueService] Apple Music authorization successful');
+        } catch (authError) {
+          this.debug.error('[QueueService] Apple Music authorization failed:', authError);
+          throw new Error('Failed to authorize Apple Music');
+        }
       }
 
-      // Add track to queue
-      await music.player.queue.prepend({
-        items: [{
-          id: track.appleMusicId,
-          type: 'songs'
-        }]
+      // Check if we have a valid track ID
+      if (!track.appleMusicId) {
+        this.debug.error('[QueueService] Invalid Apple Music track ID');
+        throw new Error('Invalid Apple Music track ID');
+      }
+
+      // Get current queue state
+      const currentQueue = music.player.queue.items;
+      this.debug.log('[QueueService] Current Apple Music queue state:', {
+        queueLength: currentQueue.length,
+        currentTrack: music.player.nowPlayingItem
       });
 
-      this.debug.log('[QueueService] Track added to Apple Music queue:', track.name);
+      // Add track to queue
+      try {
+        await music.player.queue.prepend({
+          items: [{
+            id: track.appleMusicId,
+            type: 'songs'
+          }]
+        });
+
+        // Verify track was added
+        const newQueue = music.player.queue.items;
+        const trackAdded = newQueue.some(item => item.id === track.appleMusicId);
+        
+        if (!trackAdded) {
+          this.debug.error('[QueueService] Failed to verify track addition to queue');
+          throw new Error('Failed to add track to Apple Music queue');
+        }
+
+        this.debug.log('[QueueService] Track successfully added to Apple Music queue:', {
+          trackName: track.name,
+          newQueueLength: newQueue.length
+        });
+
+        // Start playback if not already playing
+        if (!music.player.isPlaying) {
+          this.debug.log('[QueueService] Starting Apple Music playback');
+          await music.player.play();
+        }
+
+      } catch (queueError) {
+        this.debug.error('[QueueService] Error adding to Apple Music queue:', queueError);
+        throw new Error('Failed to add track to Apple Music queue');
+      }
+
     } catch (error) {
-      this.debug.error('[QueueService] Error adding to Apple Music queue:', error);
+      this.debug.error('[QueueService] Error in addToAppleMusicQueue:', error);
       throw error;
     }
   }

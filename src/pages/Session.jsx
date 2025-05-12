@@ -793,43 +793,70 @@ export default function Session() {
     }
 
     try {
-      debug.log('[Session] Initializing Spotify player');
+      debug.log('[Session] Initializing Spotify player', {
+        token: accessToken.substring(0, 10) + '...',
+        spotifyReady,
+        hasSpotifySDK: !!window.Spotify
+      });
       
       // Create new player instance
       const player = new window.Spotify.Player({
         name: 'Harmony Player',
-        getOAuthToken: cb => cb(accessToken),
+        getOAuthToken: cb => {
+          debug.log('[Session] Getting OAuth token for Spotify player');
+          cb(accessToken);
+        },
         volume: 0.5
       });
 
       // Error handling
       player.addListener('initialization_error', ({ message }) => {
-        debug.error('[Spotify] Initialization error:', message);
+        debug.error('[Spotify] Initialization error:', {
+          message,
+          timestamp: new Date().toISOString()
+        });
         showQueueNotification('Failed to initialize Spotify player', 'error');
       });
 
       player.addListener('authentication_error', ({ message }) => {
-        debug.error('[Spotify] Authentication error:', message);
+        debug.error('[Spotify] Authentication error:', {
+          message,
+          timestamp: new Date().toISOString()
+        });
         showQueueNotification('Spotify authentication failed', 'error');
+        // Clear invalid token
+        localStorage.removeItem('spotify_access_token');
       });
 
       player.addListener('account_error', ({ message }) => {
-        debug.error('[Spotify] Account error:', message);
+        debug.error('[Spotify] Account error:', {
+          message,
+          timestamp: new Date().toISOString()
+        });
         showQueueNotification('Spotify account error', 'error');
       });
 
       player.addListener('playback_error', ({ message }) => {
-        debug.error('[Spotify] Playback error:', message);
+        debug.error('[Spotify] Playback error:', {
+          message,
+          timestamp: new Date().toISOString()
+        });
         showQueueNotification('Spotify playback error', 'error');
       });
 
       // Playback status updates
       player.addListener('player_state_changed', state => {
-        if (!state) return;
+        if (!state) {
+          debug.log('[Spotify] Player state is null');
+          return;
+        }
         
         debug.log('[Spotify] Player state changed:', {
           isPlaying: !state.paused,
-          currentTrack: state.track_window?.current_track
+          currentTrack: state.track_window?.current_track,
+          position: state.position,
+          duration: state.duration,
+          timestamp: new Date().toISOString()
         });
 
         setIsPlaying(!state.paused);
@@ -847,7 +874,10 @@ export default function Session() {
 
       // Ready
       player.addListener('ready', ({ device_id }) => {
-        debug.log('[Spotify] Player ready with device ID:', device_id);
+        debug.log('[Spotify] Player ready:', {
+          device_id,
+          timestamp: new Date().toISOString()
+        });
         setSpotifyDeviceId(device_id);
         setSpotifyPlayer(player);
         spotifyPlayerRef.current = player;
@@ -858,7 +888,10 @@ export default function Session() {
 
       // Not Ready
       player.addListener('not_ready', ({ device_id }) => {
-        debug.log('[Spotify] Player not ready:', device_id);
+        debug.log('[Spotify] Player not ready:', {
+          device_id,
+          timestamp: new Date().toISOString()
+        });
         setSpotifyPlayer(null);
         spotifyPlayerRef.current = null;
         queueService.spotifyDeviceId = null;
@@ -866,14 +899,20 @@ export default function Session() {
       });
 
       // Connect to the player
+      debug.log('[Session] Connecting to Spotify player');
       const connected = await player.connect();
+      
       if (!connected) {
+        debug.error('[Session] Failed to connect to Spotify player');
         throw new Error('Failed to connect to Spotify player');
       }
 
       debug.log('[Session] Spotify player initialized successfully');
     } catch (err) {
-      debug.error('[Session] Error initializing Spotify player:', err);
+      debug.error('[Session] Error initializing Spotify player:', {
+        error: err,
+        timestamp: new Date().toISOString()
+      });
       showQueueNotification('Failed to initialize Spotify player', 'error');
     }
   };
