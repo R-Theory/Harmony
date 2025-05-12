@@ -679,6 +679,18 @@ class QueueService {
         }
       }
 
+      // Check subscription status
+      try {
+        const subscription = await music.api.me();
+        if (!subscription || !subscription.attributes?.canPlay) {
+          this.debug.error('[QueueService] No active Apple Music subscription');
+          throw new Error('Apple Music subscription required');
+        }
+      } catch (subError) {
+        this.debug.error('[QueueService] Failed to check subscription status:', subError);
+        throw new Error('Failed to verify Apple Music subscription');
+      }
+
       // Check if we have a valid track ID
       if (!track.appleMusicId) {
         this.debug.error('[QueueService] Invalid Apple Music track ID');
@@ -694,6 +706,12 @@ class QueueService {
 
       // Add track to queue
       try {
+        // First check if the track is playable
+        const catalogTrack = await music.api.song(track.appleMusicId);
+        if (!catalogTrack || !catalogTrack.attributes?.playParams) {
+          throw new Error('Track is not playable');
+        }
+
         await music.player.queue.prepend({
           items: [{
             id: track.appleMusicId,
@@ -718,7 +736,12 @@ class QueueService {
         // Start playback if not already playing
         if (!music.player.isPlaying) {
           this.debug.log('[QueueService] Starting Apple Music playback');
-          await music.player.play();
+          try {
+            await music.player.play();
+          } catch (playError) {
+            this.debug.error('[QueueService] Failed to start playback:', playError);
+            // Don't throw here - the track is still in the queue
+          }
         }
 
       } catch (queueError) {

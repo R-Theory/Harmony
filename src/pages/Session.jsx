@@ -873,17 +873,42 @@ export default function Session() {
       });
 
       // Ready
-      player.addListener('ready', ({ device_id }) => {
+      player.addListener('ready', async ({ device_id }) => {
         debug.log('[Spotify] Player ready:', {
           device_id,
           timestamp: new Date().toISOString()
         });
-        setSpotifyDeviceId(device_id);
-        setSpotifyPlayer(player);
-        spotifyPlayerRef.current = player;
-        // Set the device ID in the queue service
-        queueService.spotifyDeviceId = device_id;
-        queueService.spotifyToken = accessToken;
+
+        try {
+          // Activate the device
+          const response = await fetch('https://api.spotify.com/v1/me/player', {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              device_ids: [device_id],
+              play: false
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to activate device: ${response.statusText}`);
+          }
+
+          debug.log('[Spotify] Device activated successfully');
+          
+          setSpotifyDeviceId(device_id);
+          setSpotifyPlayer(player);
+          spotifyPlayerRef.current = player;
+          // Set the device ID in the queue service
+          queueService.spotifyDeviceId = device_id;
+          queueService.spotifyToken = accessToken;
+        } catch (error) {
+          debug.error('[Spotify] Failed to activate device:', error);
+          showQueueNotification('Failed to activate Spotify device', 'error');
+        }
       });
 
       // Not Ready
