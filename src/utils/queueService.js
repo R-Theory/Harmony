@@ -491,6 +491,33 @@ class QueueService {
     }
   }
 
+  async getCurrentPlayback() {
+    try {
+      if (!this.spotifyToken) {
+        throw new Error('No Spotify token available');
+      }
+
+      const response = await fetch('https://api.spotify.com/v1/me/player', {
+        headers: {
+          'Authorization': `Bearer ${this.spotifyToken}`
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 204) {
+          // No active device
+          return null;
+        }
+        throw new Error(`Failed to get playback state: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      this.debug.error('[QueueService] Error getting current playback:', error);
+      throw error;
+    }
+  }
+
   async transferPlayback() {
     try {
       if (!this.spotifyDeviceId) {

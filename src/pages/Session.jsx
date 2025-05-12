@@ -81,6 +81,12 @@ function TabPanel(props) {
 
 const APPLE_MUSIC_DEVELOPER_TOKEN = 'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlJXMjJVRDIyQTkifQ.eyJpYXQiOjE3NDU5NjE4NTksImV4cCI6MTc2MTUxMzg1OSwiaXNzIjoiTkxOQVROVDdWVSJ9.mOy9btGm3dGFpi-WRg82rrCAc1XTW-v-IPatLx0Tu_uL93ZSHrcRsB5bn7Y2mxTrZqsOGJn2p52f4AEHAah_Fg'; // <-- Paste your token here
 
+// Define the callback in the global scope
+window.onSpotifyWebPlaybackSDKReady = () => {
+  console.log('[Spotify SDK] Ready callback triggered');
+  // The actual initialization will be handled by the useEffect
+};
+
 export default function Session() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -750,12 +756,6 @@ export default function Session() {
 
   // Spotify Web Playback SDK loader
   useEffect(() => {
-    // Define the callback before loading the script
-    window.onSpotifyWebPlaybackSDKReady = () => {
-      console.log('[Spotify SDK] Ready callback triggered');
-      setSpotifyReady(true);
-    };
-
     if (!window.Spotify) {
       const script = document.createElement('script');
       script.src = 'https://sdk.scdn.co/spotify-player.js';
@@ -778,6 +778,13 @@ export default function Session() {
       initializeSpotifyPlayer(token);
     }
   }, [spotifyReady]);
+
+  // Handle Spotify SDK ready state
+  useEffect(() => {
+    if (window.Spotify) {
+      setSpotifyReady(true);
+    }
+  }, []);
 
   const initializeSpotifyPlayer = async (accessToken) => {
     if (!accessToken) {
