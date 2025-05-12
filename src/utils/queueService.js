@@ -441,7 +441,9 @@ class QueueService {
 
       // Add to local queue first
       this.queue.push(track);
-      this.emit('queue-update', { queue: this.queue });
+      if (this.socket) {
+        this.socket.emit('queue-update', { queue: this.queue });
+      }
 
       // Add to Spotify queue if it's a Spotify track
       if (track.source === 'spotify') {
@@ -475,10 +477,12 @@ class QueueService {
       }
 
       // Emit add-to-queue event to server
-      this.socket.emit('add-to-queue', {
-        track,
-        sessionId: this.sessionId
-      });
+      if (this.socket) {
+        this.socket.emit('add-to-queue', {
+          track,
+          sessionId: this.sessionId
+        });
+      }
 
       return true;
     } catch (error) {

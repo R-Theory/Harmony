@@ -750,17 +750,16 @@ export default function Session() {
 
   // Spotify Web Playback SDK loader
   useEffect(() => {
+    // Define the callback before loading the script
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      console.log('[Spotify SDK] Ready callback triggered');
+      setSpotifyReady(true);
+    };
+
     if (!window.Spotify) {
       const script = document.createElement('script');
       script.src = 'https://sdk.scdn.co/spotify-player.js';
       script.async = true;
-      
-      // Define the callback before loading the script
-      window.onSpotifyWebPlaybackSDKReady = () => {
-        console.log('[Spotify SDK] Ready callback triggered');
-        setSpotifyReady(true);
-      };
-      
       document.body.appendChild(script);
       script.onload = () => {
         console.log('[Spotify SDK] Script loaded');
