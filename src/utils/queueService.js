@@ -759,13 +759,6 @@ class QueueService {
         // Start playback
         this.debug.log('[QueueService] Preparing to start playback');
         try {
-          // Ensure we have playback capability
-          this.debug.log('[QueueService] Checking playback capability:', {
-            canPlay: music.player.canPlay,
-            playbackState: music.player.playbackState,
-            isPlaying: music.player.isPlaying
-          });
-
           // Wait for MusicKit to be ready
           await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -785,6 +778,10 @@ class QueueService {
             });
           });
 
+          // Initialize playback
+          this.debug.log('[QueueService] Initializing playback');
+          await music.player.prepareToPlay();
+          
           // Start playback
           this.debug.log('[QueueService] Starting playback');
           await music.player.play();
@@ -812,6 +809,7 @@ class QueueService {
           try {
             this.debug.log('[QueueService] Attempting to reauthorize and retry playback');
             await music.authorize();
+            await music.player.prepareToPlay();
             await music.player.play();
             this.debug.log('[QueueService] Playback started after reauthorization');
           } catch (retryError) {
