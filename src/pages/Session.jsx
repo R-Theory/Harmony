@@ -844,6 +844,9 @@ export default function Session() {
         setSpotifyDeviceId(device_id);
         setSpotifyPlayer(player);
         spotifyPlayerRef.current = player;
+        // Set the device ID in the queue service
+        queueService.spotifyDeviceId = device_id;
+        queueService.spotifyToken = accessToken;
       });
 
       // Not Ready
@@ -851,6 +854,8 @@ export default function Session() {
         debug.log('[Spotify] Player not ready:', device_id);
         setSpotifyPlayer(null);
         spotifyPlayerRef.current = null;
+        queueService.spotifyDeviceId = null;
+        queueService.spotifyToken = null;
       });
 
       // Connect to the player

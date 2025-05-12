@@ -580,6 +580,49 @@ class QueueService {
       sessionId: this.sessionId
     });
   }
+
+  async addToAppleMusicQueue(track) {
+    try {
+      if (!window.MusicKit) {
+        throw new Error('MusicKit not available');
+      }
+
+      const music = window.MusicKit.getInstance();
+      
+      // Ensure user is authorized
+      if (!music.isAuthorized) {
+        await music.authorize();
+      }
+
+      // Add track to queue
+      await music.player.queue.prepend({
+        items: [{
+          id: track.appleMusicId,
+          type: 'songs'
+        }]
+      });
+
+      this.debug.log('[QueueService] Track added to Apple Music queue:', track.name);
+    } catch (error) {
+      this.debug.error('[QueueService] Error adding to Apple Music queue:', error);
+      throw error;
+    }
+  }
+
+  async addToSpotifyQueue(trackUri) {
+    try {
+      const accessToken = localStorage.getItem('spotify_access_token');
+      if (!accessToken) {
+        throw new Error('No Spotify access token available');
+      }
+
+      await spotifyAddToQueue(trackUri, accessToken);
+      this.debug.log('[QueueService] Track added to Spotify queue:', trackUri);
+    } catch (error) {
+      this.debug.error('[QueueService] Error adding to Spotify queue:', error);
+      throw error;
+    }
+  }
 }
 
 // Debug Logger class
