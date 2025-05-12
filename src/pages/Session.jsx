@@ -696,8 +696,6 @@ export default function Session() {
     return devices;
   };
 
-  let spotifyPlayer = null;
-
   // Add rate limiting for Spotify API calls
   const [lastApiCall, setLastApiCall] = useState(0);
   const API_RATE_LIMIT = 1000; // 1 second between API calls
