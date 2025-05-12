@@ -688,12 +688,14 @@ class QueueService {
         }
 
         // Check if we can play music
-        if (!music.player.canPlay) {
+        if (!music.player || !music.player.canPlay) {
           this.debug.error('[QueueService] Cannot play music - subscription may be required');
           throw new Error('Apple Music subscription required');
         }
+
+        this.debug.log('[QueueService] Apple Music subscription check passed');
       } catch (subError) {
-        this.debug.error('[QueueService] Failed to check subscription status:', subError);
+        this.debug.error('[QueueService] Failed to check subscription status:', subError?.message || 'Unknown error');
         throw new Error('Failed to verify Apple Music subscription');
       }
 
@@ -745,18 +747,18 @@ class QueueService {
           try {
             await music.player.play();
           } catch (playError) {
-            this.debug.error('[QueueService] Failed to start playback:', playError);
+            this.debug.error('[QueueService] Failed to start playback:', playError?.message || 'Unknown error');
             // Don't throw here - the track is still in the queue
           }
         }
 
       } catch (queueError) {
-        this.debug.error('[QueueService] Error adding to Apple Music queue:', queueError);
+        this.debug.error('[QueueService] Error adding to Apple Music queue:', queueError?.message || 'Unknown error');
         throw new Error('Failed to add track to Apple Music queue');
       }
 
     } catch (error) {
-      this.debug.error('[QueueService] Error in addToAppleMusicQueue:', error);
+      this.debug.error('[QueueService] Error in addToAppleMusicQueue:', error?.message || 'Unknown error');
       throw error;
     }
   }
